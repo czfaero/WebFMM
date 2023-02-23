@@ -1,0 +1,16 @@
+{
+  "devDependencies": {
+    "@webgpu/types": "^0.1.27",
+    "raw-loader": "^4.0.2",
+    "ts-loader": "^9.4.2",
+    "webpack-cli": "^5.0.1",
+    "webpack-dev-server": "^4.11.1"
+  },
+  "dependencies": {
+    "gl-matrix": "^3.4.3"
+  },
+  "scripts": {
+    "build": "webpack",
+    "debug": "webpack-dev-server --open"
+  }
+}
