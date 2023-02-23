@@ -1,5 +1,5 @@
 node_modules
 .DS_Store
-*.bin
-*.mtx
+dist/*.bin
+dist/*.mtx
 dist/bundle.js
