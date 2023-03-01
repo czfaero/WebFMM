@@ -66,7 +66,7 @@ export class FMMSolver {
         this.numBoxIndexFull = 1 << 3 * this.maxLevel;
     };
     morton() {
-        const resultIndex=new Array(this.particalCount);
+        const resultIndex = new Uint32Array(this.particalCount);
         const boxSize = this.rootBoxSize / (1 << this.maxLevel);
         for (let nodeIndex = 0; nodeIndex < this.particalCount; nodeIndex++) {
             const { x, y, z } = this.getNodePosition(nodeIndex);
@@ -90,8 +90,55 @@ export class FMMSolver {
             }
             resultIndex[nodeIndex] = boxIndex;
         }
+        return resultIndex;
     };
+
+    sort(mortonIndex: Uint32Array) {
+        const tempSortIndex = new Uint32Array(this.numBoxIndexFull);
+        const sortValue = new Uint32Array(this.particalCount);
+        const sortIndex = new Uint32Array(this.particalCount);
+        for (let i = 0; i < this.particalCount; i++) {
+            sortIndex[i] = i;
+        }
+        tempSortIndex.fill(0);
+        for (const i in mortonIndex) {
+            tempSortIndex[mortonIndex[i]]++;
+        }
+        for (let i = 1; i < this.numBoxIndexFull; i++) {
+            tempSortIndex[i] += tempSortIndex[i - 1];
+        }
+        for (let i = this.particalCount - 1; i >= 0; i--) {
+            tempSortIndex[mortonIndex[i]]--;
+            sortValue[tempSortIndex[mortonIndex[i]]] = mortonIndex[i];
+            sortIndex[tempSortIndex[mortonIndex[i]]] = i;
+        }
+        return { sortValue, sortIndex }
+    }
     sortParticles() {
+        // int i;
+
+        // permutation = new int [numParticles];
+
+        const mortonIndex = this.morton();
+        // for( i=0; i<numParticles; i++ ) {
+        //   sortValue[i] = mortonIndex[i];
+        //   sortIndex[i] = i;
+        // }
+        this.sort(mortonIndex);
+        // for( i=0; i<numParticles; i++ ) {
+        //   permutation[i] = sortIndex[i];
+        // }
+
+        // vec4<float> *sortBuffer;
+        // sortBuffer = new vec4<float> [numParticles];
+        // for( i=0; i<numParticles; i++ ) {
+        //   sortBuffer[i] = bodyPos[permutation[i]];
+        // }
+        // for( i=0; i<numParticles; i++ ) {
+        //   bodyPos[i] = sortBuffer[i];
+        // }
+        // delete[] sortBuffer;
+
 
     };
     main() {
@@ -108,6 +155,9 @@ export class FMMSolver {
         //     getInteractionListP2P(numBoxIndex,numLevel,0);
         //     bodyAccel.fill(0);
         //     kernel.p2p(numBoxIndex);
+    }
+
+    constructor() {
     }
 
 }
