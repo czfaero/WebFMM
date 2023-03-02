@@ -1,13 +1,13 @@
 export class FMMSolver {
     // Basic data and helper
-    particalPositionBuffer: Float32Array; // vec3
-    particalWeightBuffer: Float32Array;
+    particalBuffer: Float32Array; // vec4
     particalCount: number;
     getNodePosition(i: number) {
         return {
-            x: this.particalPositionBuffer[i],
-            y: this.particalPositionBuffer[i + 1],
-            z: this.particalPositionBuffer[i + 2]
+            x: this.particalBuffer[i * 4],
+            y: this.particalBuffer[i * 4 + 1],
+            z: this.particalBuffer[i * 4 + 2],
+            w: this.particalBuffer[i * 4 + 3]
         }
     }
 
@@ -115,32 +115,43 @@ export class FMMSolver {
         return { sortValue, sortIndex }
     }
     sortParticles() {
-        // int i;
-
-        // permutation = new int [numParticles];
-
         const mortonIndex = this.morton();
-        // for( i=0; i<numParticles; i++ ) {
-        //   sortValue[i] = mortonIndex[i];
-        //   sortIndex[i] = i;
-        // }
-        this.sort(mortonIndex);
-        // for( i=0; i<numParticles; i++ ) {
-        //   permutation[i] = sortIndex[i];
-        // }
+        const { sortValue, sortIndex } = this.sort(mortonIndex);
 
-        // vec4<float> *sortBuffer;
-        // sortBuffer = new vec4<float> [numParticles];
-        // for( i=0; i<numParticles; i++ ) {
-        //   sortBuffer[i] = bodyPos[permutation[i]];
-        // }
-        // for( i=0; i<numParticles; i++ ) {
-        //   bodyPos[i] = sortBuffer[i];
-        // }
-        // delete[] sortBuffer;
-
-
+        const tempParticle = new Float32Array(this.particalBuffer.length);
+        for (let i = 0; i < this.particalCount; i++) {
+            const offset = sortIndex[i] * 4;
+            tempParticle.set(this.particalBuffer.subarray(offset, offset + 4), i * 4);
+        }
+        this.particalBuffer = tempParticle;
     };
+    numBoxIndexLeaf: number;
+    numBoxIndexTotal: number;
+    countNonEmptyBoxes() {
+        const mortonIndex = this.morton();
+        const { sortValue, sortIndex } = this.sort(mortonIndex);
+        this.numBoxIndexLeaf = 0;
+        let currentIndex = -1;
+        for (let i = 0; i < this.particalCount; i++) {
+            if (sortValue[i] != currentIndex) {
+                this.numBoxIndexLeaf++;
+                currentIndex = sortValue[i];
+            }
+        }
+
+        this.numBoxIndexTotal = this.numBoxIndexLeaf;
+        for (let numLevel = this.maxLevel - 1; numLevel >= 2; numLevel--) {
+            currentIndex = -1;
+            for (let i = 0; i < this.particalCount; i++) {
+                if (sortValue[i] / (1 << 3 * (this.maxLevel - numLevel)) != currentIndex) {
+                    this.numBoxIndexTotal++;
+                    currentIndex = sortValue[i] / (1 << 3 * (this.maxLevel - numLevel));
+                }
+            }
+        }
+
+
+    }
     main() {
         this.setBoxSize();
         this.setOptimumLevel();
