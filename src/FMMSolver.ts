@@ -1,3 +1,5 @@
+const maxM2LInteraction = 189;        // max of M2L interacting boxes
+
 export class FMMSolver {
     // Basic data and helper
     particalBuffer: Float32Array; // vec4
@@ -92,6 +94,45 @@ export class FMMSolver {
         }
         return resultIndex;
     };
+    unmorton(boxIndex: number) {
+        const mortonIndex3D = new Uint32Array(3);
+
+        mortonIndex3D.fill(0);
+        let n = boxIndex;
+        let k = 0;
+        let i = 0;
+        while (n != 0) {
+            let j = 2 - k;
+            mortonIndex3D[j] += (n % 2) * (1 << i);
+            n >>= 1;
+            k = (k + 1) % 3;
+            if (k == 0) i++;
+        }
+        return {
+            x: mortonIndex3D[1],
+            y: mortonIndex3D[2],
+            z: mortonIndex3D[0]
+        }
+    }
+    // Generate Morton index for a box center to use in M2L translation
+    morton1(boxIndex3D, numLevel: number) {
+
+        let boxIndex = 0;
+        for (let i = 0; i < numLevel; i++) {
+            let nx = boxIndex3D.x % 2;
+            boxIndex3D.x >>= 1;
+            boxIndex += nx * (1 << (3 * i + 1));
+
+            let ny = boxIndex3D.y % 2;
+            boxIndex3D.y >>= 1;
+            boxIndex += ny * (1 << (3 * i));
+
+            let nz = boxIndex3D.z % 2;
+            boxIndex3D.z >>= 1;
+            boxIndex += nz * (1 << (3 * i + 2));
+        }
+        return boxIndex
+    }
 
     sort(mortonIndex: Uint32Array) {
         const tempSortIndex = new Uint32Array(this.numBoxIndexFull);
@@ -152,18 +193,104 @@ export class FMMSolver {
 
 
     }
+    levelOffset: Int32Array;
+    particleOffset: any;
+    boxIndexMask: Int32Array;
+    boxIndexFull: Int32Array;
+    numInteraction: Int32Array;
+    interactionList: any;
+    boxOffsetStart: Int32Array;
+    boxOffsetEnd: Int32Array;
+    allocate() {
+
+        this.particleOffset = [0, 0].map(_ => new Array(this.numBoxIndexLeaf));
+        this.boxIndexMask = new Int32Array(this.numBoxIndexFull);
+        this.boxIndexFull = new Int32Array(this.numBoxIndexTotal);
+        this.levelOffset = new Int32Array(this.maxLevel);
+
+        this.numInteraction = new Int32Array(this.numBoxIndexLeaf);
+        this.interactionList = new Array(this.numBoxIndexLeaf).map(_ => new Int32Array(maxM2LInteraction));
+        this.boxOffsetStart = new Int32Array(this.numBoxIndexLeaf);
+        this.boxOffsetEnd = new Int32Array(this.numBoxIndexLeaf);
+    }
+
+    getBoxData() {
+        const mortonIndex = this.morton();
+
+        let numBoxIndex = 0;
+        let currentIndex = -1;
+        for (let i = 0; i < this.numBoxIndexFull; i++) this.boxIndexMask[i] = -1;
+        for (let i = 0; i < this.particalCount; i++) {
+            if (mortonIndex[i] != currentIndex) {
+                this.boxIndexMask[mortonIndex[i]] = numBoxIndex;
+                this.boxIndexFull[numBoxIndex] = mortonIndex[i];
+                this.particleOffset[0][numBoxIndex] = i;
+                if (numBoxIndex > 0) this.particleOffset[1][numBoxIndex - 1] = i - 1;
+                currentIndex = mortonIndex[i];
+                numBoxIndex++;
+            }
+        }
+        this.particleOffset[1][numBoxIndex - 1] = this.particalCount - 1;
+        return numBoxIndex;
+    }
+
+    getInteractionListP2P(numBoxIndex: number, numLevel: number) {
+        // Initialize the minimum and maximum values
+        let jxmin = 1000000,
+            jxmax = -1000000,
+            jymin = 1000000,
+            jymax = -1000000,
+            jzmin = 1000000,
+            jzmax = -1000000;
+        // Calculate the minimum and maximum of boxIndex3D
+        for (let jj = 0; jj < numBoxIndex; jj++) {
+            let jb = jj + this.levelOffset[numLevel - 1];
+            let boxIndex3D = this.unmorton(this.boxIndexFull[jb]);
+            jxmin = Math.min(jxmin, boxIndex3D.x);
+            jxmax = Math.max(jxmax, boxIndex3D.x);
+            jymin = Math.min(jymin, boxIndex3D.y);
+            jymax = Math.max(jymax, boxIndex3D.y);
+            jzmin = Math.min(jzmin, boxIndex3D.z);
+            jzmax = Math.max(jzmax, boxIndex3D.z);
+        }
+
+        //p2p
+        for (let ii = 0; ii < numBoxIndex; ii++) {
+            let ib = ii + this.levelOffset[numLevel - 1];
+            this.numInteraction[ii] = 0;
+            let boxIndex3D = this.unmorton(this.boxIndexFull[ib]);
+            let ix = boxIndex3D.x;
+            let iy = boxIndex3D.y;
+            let iz = boxIndex3D.z;
+            for (let jx = Math.max(ix - 1, jxmin); jx <= Math.min(ix + 1, jxmax); jx++) {
+                for (let jy = Math.max(iy - 1, jymin); jy <= Math.min(iy + 1, jymax); jy++) {
+                    for (let jz = Math.max(iz - 1, jzmin); jz <= Math.min(iz + 1, jzmax); jz++) {
+                        boxIndex3D.x = jx;
+                        boxIndex3D.y = jy;
+                        boxIndex3D.z = jz;
+                        let boxIndex = this.morton1(boxIndex3D, numLevel);
+                        let jj = this.boxIndexMask[boxIndex];
+                        if (jj != -1) {
+                            this.interactionList[ii][this.numInteraction[ii]] = jj;
+                            this.numInteraction[ii]++;
+                        }
+                    }
+                }
+            }
+        }
+    }
     main() {
         this.setBoxSize();
         this.setOptimumLevel();
         this.sortParticles();
-        //     countNonEmptyBoxes(numParticles);
+        this.countNonEmptyBoxes();
         //     allocate();
-        //     numLevel = maxLevel;
+        let numLevel = this.maxLevel;
         //     levelOffset[numLevel-1] = 0;
         //     kernel.precalc();
-        //     getBoxData(numParticles,numBoxIndex);
+        let numBoxIndex = this.getBoxData();
         //   // P2P
-        //     getInteractionListP2P(numBoxIndex,numLevel,0);
+        this.getInteractionListP2P(numBoxIndex, numLevel);
         //     bodyAccel.fill(0);
         //     kernel.p2p(numBoxIndex);
     }
