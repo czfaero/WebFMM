@@ -162,7 +162,7 @@ export class FMMSolver {
         const tempParticle = new Float32Array(this.particleBuffer.length);
         for (let i = 0; i < this.particleCount; i++) {
             const offset = sortIndex[i] * 4;
-            tempParticle.set(this.particalBuffer.subarray(offset, offset + 4), i * 4);
+            tempParticle.set(this.particleBuffer.subarray(offset, offset + 4), i * 4);
         }
         this.particleBuffer = tempParticle;
     };
