@@ -56,7 +56,7 @@ export class FMMSolver {
         // 按照点的数量区间定级别
         const level_switch = [1e5, 7e5, 7e6, 5e7, 3e8, 2e9]; // gpu-fmm
 
-        this.maxLevel = 1;
+        this.maxLevel = 2;
         for (const level of level_switch) {
             if (this.particleCount >= level) {
                 this.maxLevel++;
