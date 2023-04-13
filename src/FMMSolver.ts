@@ -295,7 +295,9 @@ export class FMMSolver {
         //     kernel.p2p(numBoxIndex);
     }
 
-    constructor() {
+    constructor(particleBuffer: Float32Array) {
+        this.particleBuffer = particleBuffer;
+        this.particleCount = particleBuffer.length / 4;
     }
 
 }
