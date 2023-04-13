@@ -2,14 +2,14 @@ const maxM2LInteraction = 189;        // max of M2L interacting boxes
 
 export class FMMSolver {
     // Basic data and helper
-    particalBuffer: Float32Array; // vec4
-    particalCount: number;
-    getNodePosition(i: number) {
+    particleBuffer: Float32Array; // vec4
+    particleCount: number;
+    getParticle(i: number) {
         return {
-            x: this.particalBuffer[i * 4],
-            y: this.particalBuffer[i * 4 + 1],
-            z: this.particalBuffer[i * 4 + 2],
-            w: this.particalBuffer[i * 4 + 3]
+            x: this.particleBuffer[i * 4],
+            y: this.particleBuffer[i * 4 + 1],
+            z: this.particleBuffer[i * 4 + 2],
+            w: this.particleBuffer[i * 4 + 3]
         }
     }
 
@@ -29,8 +29,8 @@ export class FMMSolver {
             zmin = 1000000,
             zmax = -1000000;
 
-        for (let i = 0; i < this.particalCount; i++) {
-            const { x, y, z } = this.getNodePosition(i);
+        for (let i = 0; i < this.particleCount; i++) {
+            const { x, y, z } = this.getParticle(i);
             xmin = Math.min(xmin, x);
             xmax = Math.max(xmax, x);
             ymin = Math.min(ymin, y);
@@ -58,7 +58,7 @@ export class FMMSolver {
 
         this.maxLevel = 1;
         for (const level of level_switch) {
-            if (this.particalCount >= level) {
+            if (this.particleCount >= level) {
                 this.maxLevel++;
             } else {
                 break;
@@ -68,10 +68,10 @@ export class FMMSolver {
         this.numBoxIndexFull = 1 << 3 * this.maxLevel;
     };
     morton() {
-        const resultIndex = new Uint32Array(this.particalCount);
+        const resultIndex = new Int32Array(this.particleCount);
         const boxSize = this.rootBoxSize / (1 << this.maxLevel);
-        for (let nodeIndex = 0; nodeIndex < this.particalCount; nodeIndex++) {
-            const { x, y, z } = this.getNodePosition(nodeIndex);
+        for (let nodeIndex = 0; nodeIndex < this.particleCount; nodeIndex++) {
+            const { x, y, z } = this.getParticle(nodeIndex);
             let nx = Math.floor((x - this.boxMinX) / boxSize),
                 ny = Math.floor((y - this.boxMinY) / boxSize),
                 nz = Math.floor((z - this.boxMinZ) / boxSize);
@@ -95,7 +95,7 @@ export class FMMSolver {
         return resultIndex;
     };
     unmorton(boxIndex: number) {
-        const mortonIndex3D = new Uint32Array(3);
+        const mortonIndex3D = new Int32Array(3);
 
         mortonIndex3D.fill(0);
         let n = boxIndex;
@@ -134,11 +134,11 @@ export class FMMSolver {
         return boxIndex
     }
 
-    sort(mortonIndex: Uint32Array) {
-        const tempSortIndex = new Uint32Array(this.numBoxIndexFull);
-        const sortValue = new Uint32Array(this.particalCount);
-        const sortIndex = new Uint32Array(this.particalCount);
-        for (let i = 0; i < this.particalCount; i++) {
+    sort(mortonIndex: Int32Array) {
+        const tempSortIndex = new Int32Array(this.numBoxIndexFull);
+        const sortValue = new Int32Array(this.particleCount);
+        const sortIndex = new Int32Array(this.particleCount);
+        for (let i = 0; i < this.particleCount; i++) {
             sortIndex[i] = i;
         }
         tempSortIndex.fill(0);
@@ -148,7 +148,7 @@ export class FMMSolver {
         for (let i = 1; i < this.numBoxIndexFull; i++) {
             tempSortIndex[i] += tempSortIndex[i - 1];
         }
-        for (let i = this.particalCount - 1; i >= 0; i--) {
+        for (let i = this.particleCount - 1; i >= 0; i--) {
             tempSortIndex[mortonIndex[i]]--;
             sortValue[tempSortIndex[mortonIndex[i]]] = mortonIndex[i];
             sortIndex[tempSortIndex[mortonIndex[i]]] = i;
@@ -159,12 +159,12 @@ export class FMMSolver {
         const mortonIndex = this.morton();
         const { sortValue, sortIndex } = this.sort(mortonIndex);
 
-        const tempParticle = new Float32Array(this.particalBuffer.length);
-        for (let i = 0; i < this.particalCount; i++) {
+        const tempParticle = new Float32Array(this.particleBuffer.length);
+        for (let i = 0; i < this.particleCount; i++) {
             const offset = sortIndex[i] * 4;
             tempParticle.set(this.particalBuffer.subarray(offset, offset + 4), i * 4);
         }
-        this.particalBuffer = tempParticle;
+        this.particleBuffer = tempParticle;
     };
     numBoxIndexLeaf: number;
     numBoxIndexTotal: number;
@@ -173,7 +173,7 @@ export class FMMSolver {
         const { sortValue, sortIndex } = this.sort(mortonIndex);
         this.numBoxIndexLeaf = 0;
         let currentIndex = -1;
-        for (let i = 0; i < this.particalCount; i++) {
+        for (let i = 0; i < this.particleCount; i++) {
             if (sortValue[i] != currentIndex) {
                 this.numBoxIndexLeaf++;
                 currentIndex = sortValue[i];
@@ -183,7 +183,7 @@ export class FMMSolver {
         this.numBoxIndexTotal = this.numBoxIndexLeaf;
         for (let numLevel = this.maxLevel - 1; numLevel >= 2; numLevel--) {
             currentIndex = -1;
-            for (let i = 0; i < this.particalCount; i++) {
+            for (let i = 0; i < this.particleCount; i++) {
                 if (sortValue[i] / (1 << 3 * (this.maxLevel - numLevel)) != currentIndex) {
                     this.numBoxIndexTotal++;
                     currentIndex = sortValue[i] / (1 << 3 * (this.maxLevel - numLevel));
@@ -220,7 +220,7 @@ export class FMMSolver {
         let numBoxIndex = 0;
         let currentIndex = -1;
         for (let i = 0; i < this.numBoxIndexFull; i++) this.boxIndexMask[i] = -1;
-        for (let i = 0; i < this.particalCount; i++) {
+        for (let i = 0; i < this.particleCount; i++) {
             if (mortonIndex[i] != currentIndex) {
                 this.boxIndexMask[mortonIndex[i]] = numBoxIndex;
                 this.boxIndexFull[numBoxIndex] = mortonIndex[i];
@@ -230,7 +230,7 @@ export class FMMSolver {
                 numBoxIndex++;
             }
         }
-        this.particleOffset[1][numBoxIndex - 1] = this.particalCount - 1;
+        this.particleOffset[1][numBoxIndex - 1] = this.particleCount - 1;
         return numBoxIndex;
     }
 
