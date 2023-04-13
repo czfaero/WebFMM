@@ -1,22 +1,24 @@
 import { NodeLinkRenderer } from './NodeLinkRenderer';
 
-import { GetNodes, GetLinks, GetNodeColors } from './diagrams/MatrixMarketLoader'
+import { GetNodes, GetLinks } from './diagrams/BinaryLoader'
 
 import { FMMSolver } from './FMMSolver';
 
+import { Tester } from './tester'
+
 async function main() {
     const canvas = document.querySelector("canvas") as HTMLCanvasElement;
-    const nodes = await GetNodes();
+    const nodes = await GetNodes(10000);
     const links = await GetLinks();
-    const nodeColors = await GetNodeColors();
 
-    const solver = new FMMSolver();
+    const solver = new FMMSolver(nodes);
 
+    const tester = new Tester();
+    await tester.Test(solver);
 
-    const renderer = new NodeLinkRenderer();
-    renderer.setData(nodes, links, nodeColors);
-    await renderer.init(canvas);
-
+    //const renderer = new NodeLinkRenderer();
+    //renderer.setData(nodes, links, null);
+    //await renderer.init(canvas);
 
 }
 main();
