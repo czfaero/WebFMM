@@ -209,7 +209,7 @@ export class FMMSolver {
         this.levelOffset = new Int32Array(this.maxLevel);
 
         this.numInteraction = new Int32Array(this.numBoxIndexLeaf);
-        this.interactionList = new Array(this.numBoxIndexLeaf).map(_ => new Int32Array(maxM2LInteraction));
+        this.interactionList = new Array(this.numBoxIndexLeaf).fill(0).map(_ => new Int32Array(maxM2LInteraction));
         this.boxOffsetStart = new Int32Array(this.numBoxIndexLeaf);
         this.boxOffsetEnd = new Int32Array(this.numBoxIndexLeaf);
     }
@@ -284,9 +284,9 @@ export class FMMSolver {
         this.setOptimumLevel();
         this.sortParticles();
         this.countNonEmptyBoxes();
-        //     allocate();
+        this.allocate();
         let numLevel = this.maxLevel;
-        //     levelOffset[numLevel-1] = 0;
+        this.levelOffset[numLevel-1] = 0;
         //     kernel.precalc();
         let numBoxIndex = this.getBoxData();
         //   // P2P

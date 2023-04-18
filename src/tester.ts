@@ -20,13 +20,16 @@ export class Tester {
         await VerifyParticleBuffer("data-pos-pre-p2p.bin", instance.particleBuffer);
 
         instance.countNonEmptyBoxes();
+        console.log(`numBoxIndexLeaf: ${instance.numBoxIndexLeaf} | numBoxIndexTotal: ${instance.numBoxIndexTotal}`);
         instance.allocate();
         let numLevel = instance.maxLevel;
-        //     levelOffset[numLevel-1] = 0;
+        instance.levelOffset[numLevel - 1] = 0;
         //     kernel.precalc();
         let numBoxIndex = instance.getBoxData();
         //   // P2P
         instance.getInteractionListP2P(numBoxIndex, numLevel);
+
+        VerifyIntIntBuffer("data-p2p-list.bin", instance.interactionList);
         //     bodyAccel.fill(0);
         //     kernel.p2p(numBoxIndex);
     }
@@ -96,4 +99,35 @@ async function VerifyIntBuffer(name: string, data: Int32Array) {
         throw "Failure: " + name;
     }
 
+}
+
+async function VerifyIntIntBuffer(name: string, data: any) {
+    const rawData = await (await fetch(name)).arrayBuffer();
+    const expect = new Int32Array(rawData);
+
+    console.log("bin size:" + expect.length)
+    console.log(`Sample: ${Array.from(expect.subarray(0, 4)).join(' ')}`)
+
+    if (data.length * data[0].length != expect.length) {
+        throw `${name} size: ${data.length * data[0].length}!=${expect.length}`;
+    }
+    let error_count = 0;
+    for (let i = 0; i < data.length; i++) {
+        for (let j = 0; j < data[i].length; j++) {
+            const r = CompareNumber(expect[i * data[i].length + j], data[i][j]);
+            if (!r) {
+                error_count++;
+                console.log(`[${i}]Expect: ${expect[i]} | Got: ${data[i]}`);
+            }
+        }
+        if (error_count > 10) {
+            break;
+        }
+    }
+    if (error_count == 0) {
+        console.log("Success: " + name);
+    }
+    else {
+        throw "Failure: " + name;
+    }
 }
