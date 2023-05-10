@@ -1,4 +1,8 @@
-const maxM2LInteraction = 189;        // max of M2L interacting boxes
+import wgsl from './shaders/FMM.wgsl';
+
+
+/**max of M2L interacting boxes */
+const maxM2LInteraction = 189;
 
 export class FMMSolver {
     // Basic data and helper
@@ -64,10 +68,12 @@ export class FMMSolver {
                 break;
             }
         }
+        console.log("maxLevel: " + this.maxLevel);
 
         this.numBoxIndexFull = 1 << 3 * this.maxLevel;
     };
-    morton() {
+    /**@return Array, box id for every partical*/
+    morton(): Int32Array {
         const resultIndex = new Int32Array(this.particleCount);
         const boxSize = this.rootBoxSize / (1 << this.maxLevel);
         for (let nodeIndex = 0; nodeIndex < this.particleCount; nodeIndex++) {
@@ -94,6 +100,7 @@ export class FMMSolver {
         }
         return resultIndex;
     };
+    /**@return Object with x,y,z */
     unmorton(boxIndex: number) {
         const mortonIndex3D = new Int32Array(3);
 
@@ -134,6 +141,9 @@ export class FMMSolver {
         return boxIndex
     }
 
+    /** sort the Morton index
+     * @return sortValue (boxid), sortIndex (i) 
+    */
     sort(mortonIndex: Int32Array) {
         const tempSortIndex = new Int32Array(this.numBoxIndexFull);
         const sortValue = new Int32Array(this.particleCount);
@@ -166,7 +176,9 @@ export class FMMSolver {
         }
         this.particleBuffer = tempParticle;
     };
+    /** non-empty FMM boxes @ maxLevel */
     numBoxIndexLeaf: number;
+    /** numBoxIndexLeaf for all levels */
     numBoxIndexTotal: number;
     countNonEmptyBoxes() {
         const mortonIndex = this.morton();
@@ -190,16 +202,25 @@ export class FMMSolver {
                 }
             }
         }
-
-
     }
+
     levelOffset: Int32Array;
+    /**
+     * first and last particle in each box
+     * int[2][numBoxIndexLeaf]
+     */
     particleOffset: any;
+    /** int[numBoxIndexFull]; link list for box index : Full -> NonEmpty */
     boxIndexMask: Int32Array;
+    /** int[numBoxIndexTotal]; link list for box index : NonEmpty -> Full */
     boxIndexFull: Int32Array;
+    /** int[numBoxIndexLeaf] */
     numInteraction: Int32Array;
+    /** int[numBoxIndexLeaf][maxM2LInteraction] */
     interactionList: any;
+    /** int[numBoxIndexLeaf] */
     boxOffsetStart: Int32Array;
+    /** int[numBoxIndexLeaf] */
     boxOffsetEnd: Int32Array;
     allocate() {
 
@@ -279,25 +300,129 @@ export class FMMSolver {
             }
         }
     }
-    main() {
+    async main() {
+        await this.InitWgpu();
         this.setBoxSize();
         this.setOptimumLevel();
         this.sortParticles();
         this.countNonEmptyBoxes();
         this.allocate();
         let numLevel = this.maxLevel;
-        this.levelOffset[numLevel-1] = 0;
+        this.levelOffset[numLevel - 1] = 0;
         //     kernel.precalc();
         let numBoxIndex = this.getBoxData();
         //   // P2P
         this.getInteractionListP2P(numBoxIndex, numLevel);
         //     bodyAccel.fill(0);
+        this.device.queue.writeBuffer(this.particleBufferGPU, 0, this.particleBuffer);
+
         //     kernel.p2p(numBoxIndex);
+        await this.p2p(numBoxIndex);
+
+    }
+    adapter: GPUAdapter;
+    device: GPUDevice;
+    particleBufferGPU: GPUBuffer;
+    accelBufferGPU: GPUBuffer;
+    cmdBufferGPU: GPUBuffer;
+    readBufferGPU: GPUBuffer;
+    maxGPUThread: number;
+    async InitWgpu() {
+        this.adapter = await navigator.gpu.requestAdapter();
+        this.device = await this.adapter.requestDevice();
+        // to-do: check limit
+        console.log(this.adapter);
+        this.maxGPUThread = 256;
+        this.particleBufferGPU = this.device.createBuffer({
+            size: this.particleBuffer.byteLength,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        });
+        this.accelBufferGPU = this.device.createBuffer({
+            size: this.particleBuffer.byteLength / 4 * 3,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+        });
+        this.cmdBufferGPU = this.device.createBuffer({
+            size: this.particleBuffer.byteLength, // to-do: set a good value
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        });
+        this.readBufferGPU = this.device.createBuffer({
+            size: this.particleBuffer.byteLength / 4 * 3,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+        });
+    }
+
+    async p2p(numBoxIndex: number) {
+
+        const cmd = new Uint32Array(40000);
+        let cmdSize = 0;
+        for (let ii = 0; ii < numBoxIndex; ii++) {
+            for (let ij = 0; ij < this.numInteraction[ii]; ij++) {
+                const jj = this.interactionList[ii][ij];
+                for (let i = this.particleOffset[0][ii]; i <= this.particleOffset[1][ii]; i++) {
+                    for (let j = this.particleOffset[0][jj]; j <= this.particleOffset[1][jj]; j++) {
+                        //calc
+                        cmd[2 + cmdSize * 2] = i;
+                        cmd[2 + cmdSize * 2 + 1] = j;
+                        cmdSize++;
+                    }
+                }
+            }
+        }
+        cmd[0] = cmdSize;
+        this.device.queue.writeBuffer(this.cmdBufferGPU, 0, cmd);
+
+
+        this.RunCompute("p2p", [this.particleBufferGPU, this.accelBufferGPU, this.cmdBufferGPU]);
+
+
+    }
+    async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>) {
+        const shaderModule = this.device.createShaderModule({
+            code: wgsl,
+        })
+        const computePipeline = this.device.createComputePipeline({
+            layout: 'auto', // infer from shader code.
+            compute: {
+                module: shaderModule,
+                entryPoint: entryPoint
+            }
+        });
+
+        const bindGroupLayout = computePipeline.getBindGroupLayout(0);
+
+        console.log(bindGroupLayout);
+        const entries = buffers.map((b, i) => {
+            return { binding: i, resource: { buffer: b } };
+        });
+        const bindGroup = this.device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: entries
+        });
+        const commandEncoder = this.device.createCommandEncoder();
+        const computePassEncoder = commandEncoder.beginComputePass();
+        computePassEncoder.setPipeline(computePipeline);
+        computePassEncoder.setBindGroup(0, bindGroup);
+        computePassEncoder.dispatchWorkgroups(256, 1);
+        computePassEncoder.end();
+        commandEncoder.copyBufferToBuffer(this.accelBufferGPU, 0, this.readBufferGPU, 0, this.particleBuffer.byteLength/4*3);
+
+        const gpuCommands = commandEncoder.finish();
+        this.device.queue.submit([gpuCommands]);
+        await this.device.queue.onSubmittedWorkDone();
+
+        await this.readBufferGPU.mapAsync(GPUMapMode.READ);
+        const handle = this.readBufferGPU.getMappedRange();
+        const accels = new Float32Array(handle);
+        console.log(accels);
+
+        this.readBufferGPU.unmap();
     }
 
     constructor(particleBuffer: Float32Array) {
         this.particleBuffer = particleBuffer;
         this.particleCount = particleBuffer.length / 4;
+
+
     }
 
 }
