@@ -16,7 +16,7 @@ async function main() {
     const nodes = await GetNodes(10000);
     const links = await GetLinks();
 
-    const solver = new FMMSolver(nodes);
+    const solver = new FMMSolver(nodes,"wgpu");
     await solver.main();
 
     // const tester = new Tester();
