@@ -2,6 +2,7 @@ import wgsl from './shaders/FMM.wgsl';
 
 import { IKernel } from './kernels/kernel';
 import { KernelWgpu } from './kernels/kernel_wgpu';
+import { KernelTs } from './kernels/kernel_ts';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -324,7 +325,7 @@ export class FMMSolver {
     }
 
     constructor(particleBuffer: Float32Array, kernelName: string) {
-        const TKernel = { "wgpu": KernelWgpu }[kernelName];
+        const TKernel = { "wgpu": KernelWgpu, "ts": KernelTs }[kernelName];
         if (!TKernel) throw "Unknown Kernel: " + kernelName;
         this.kernel = new TKernel();
         this.particleBuffer = particleBuffer;
