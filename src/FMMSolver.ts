@@ -58,6 +58,7 @@ export class FMMSolver {
 
     //setOptimumLevel
     maxLevel: number;
+    /** All boxes at maxLevel */
     numBoxIndexFull: number;
     setOptimumLevel() {
         // 按照点的数量区间定级别
@@ -327,6 +328,7 @@ export class FMMSolver {
     constructor(particleBuffer: Float32Array, kernelName: string) {
         const TKernel = { "wgpu": KernelWgpu, "ts": KernelTs }[kernelName];
         if (!TKernel) throw "Unknown Kernel: " + kernelName;
+        console.log("Kernel: " + kernelName);
         this.kernel = new TKernel();
         this.particleBuffer = particleBuffer;
         this.particleCount = particleBuffer.length / 4;
