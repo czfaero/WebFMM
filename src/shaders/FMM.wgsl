@@ -52,22 +52,17 @@ fn getParticle(i:u32) -> vec4f{
 @compute @workgroup_size(256, 1)
 fn p2p(@builtin(global_invocation_id) global_id : vec3<u32>) {
   let thread = global_id.x;
-  let total = cmd[0];
-  let cmdLength = 2u;
-  let cmdPerThread = cmd[0] / 256 + 1;
-  let start = cmdPerThread * thread * cmdLength + 2;
-  for(var c = 0u; c<cmdPerThread;c++){
-    if(start+c*2>=total){ break;}
+  let count = cmd[2+thread*2+1];
+  let start = cmd[2+thread*2];
+  for(var c = 0u; c<count; c++){
     let i = cmd[start+c*2];
     let j = cmd[start+c*2+1];
     let a = getParticle(i);
     let b = getParticle(j);
     let r = p2p_core(a,b);
 
-    accelBuffer[i*3]+=r.x;
-    accelBuffer[i*3+1]+=r.y;
-    accelBuffer[i*3+2]+=r.z;
-
+    accelBuffer[i*3] += r.x;
+    accelBuffer[i*3+1] += r.y;
+    accelBuffer[i*3+2] += r.z;
   }
-  //accelBuffer[0]=f32(total);
 }
