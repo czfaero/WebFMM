@@ -2,6 +2,8 @@ import wgsl from '../shaders/FMM.wgsl';
 
 import { IKernel } from './kernel';
 
+const SIZEOF_32 = 4;
+
 export class KernelWgpu implements IKernel {
   debug: boolean;
   particleCount: number;
@@ -14,115 +16,117 @@ export class KernelWgpu implements IKernel {
   accelBufferGPU: GPUBuffer;
   cmdBufferGPU: GPUBuffer;
   readBufferGPU: GPUBuffer;
-  maxGPUThread: number;
-  cmdBufferSize: number;
-
+  maxThreadCount: number;
+  maxWorkgroupCount: number;
   accelBuffer: Float32Array;
+  accelBufferSize: number;
+  uniformBufferSize: number;
+  uniformBuffer: Uint32Array;
+  uniformBufferGPU: GPUBuffer;
   async Init(particleBuffer: Float32Array) {
     this.particleCount = particleBuffer.length / 4;
+    this.accelBuffer = new Float32Array(this.particleCount * 3);
+    this.accelBufferSize = this.accelBuffer.byteLength;
     this.adapter = await navigator.gpu.requestAdapter();
     this.device = await this.adapter.requestDevice();
     // to-do: check limit
     console.log(this.adapter);
-    this.maxGPUThread = 256;
-    this.cmdBufferSize = 8000000;// to-do: set a good value
+    this.maxThreadCount = 256;
+    this.maxWorkgroupCount = 128;
+    // this.cmdBufferLength = this.maxThreadCount * this.maxWorkgroupCount * 2;// to-do: set a good value
+    // this.cmdBufferSize = this.cmdBufferLength * SIZEOF_32;
     this.particleBufferGPU = this.device.createBuffer({
       size: particleBuffer.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
     this.accelBufferGPU = this.device.createBuffer({
-      size: particleBuffer.byteLength / 4 * 3,
+      size: this.accelBufferSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
     });
-    this.cmdBufferGPU = this.device.createBuffer({
-      size: this.cmdBufferSize,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-    });
+
     this.readBufferGPU = this.device.createBuffer({
-      size: particleBuffer.byteLength / 4 * 3,
+      size: this.accelBufferSize,
       usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+    });
+
+    this.uniformBuffer = new Uint32Array(1);
+    this.uniformBufferSize = this.uniformBuffer.byteLength;
+
+    this.uniformBufferGPU = this.device.createBuffer({
+      size: this.uniformBufferSize,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     this.device.queue.writeBuffer(this.particleBufferGPU, 0, particleBuffer);
   }
   async p2p(numBoxIndex: number, interactionList: any, numInteraction: any, particleOffset: any) {
-    const cmd = new Uint32Array(this.cmdBufferSize / 4);
-    let cmdSize = 0;
-    const threadOffset = 2;
-    const cmdOffset = threadOffset + 2 * this.maxGPUThread;
-    let cmdCounts = new Array();
-    const maxCmdCount = (cmd.length - cmdOffset) / 2;
+
+    let cmdCount = 0;
+    const maxCmdCount = this.accelBuffer.length / 3;
+    const cmd = new Uint32Array(maxCmdCount * 2);
+    this.cmdBufferGPU = this.device.createBuffer({
+      size: cmd.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
     for (let ii = 0; ii < numBoxIndex; ii++) {
       for (let i = particleOffset[0][ii]; i <= particleOffset[1][ii]; i++) {
-        let cmdCount = 0;
         for (let ij = 0; ij < numInteraction[ii]; ij++) {
           const jj = interactionList[ii][ij];
           for (let j = particleOffset[0][jj]; j <= particleOffset[1][jj]; j++) {
             //calc
-            cmd[cmdOffset + cmdSize * 2] = i;
-            cmd[cmdOffset + cmdSize * 2 + 1] = j;
-            cmdSize++;
+            cmd[cmdCount * 2] = i;
+            cmd[cmdCount * 2 + 1] = j;
             cmdCount++;
-            if (cmdSize == maxCmdCount) {
-              cmdCounts.push(cmdCount);
-              cmd[0] = cmdSize;
-              this.CmdThread(cmd, cmdSize, cmdCounts, threadOffset, cmdOffset);
+            if (cmdCount == maxCmdCount) {
               this.device.queue.writeBuffer(this.cmdBufferGPU, 0, cmd);
-              await this.RunCompute("p2p", [this.particleBufferGPU, this.accelBufferGPU, this.cmdBufferGPU]);
-              cmdSize = 0;
+              await this.p2p_ApplyAccel(cmd, cmdCount);
               cmdCount = 0;
-              cmdCounts = new Array();
               cmd.fill(0);
             }
           }
         }
-        cmdCounts.push(cmdCount);
       }
     }
 
-    cmd[0] = cmdSize;
-    this.CmdThread(cmd, cmdSize, cmdCounts, threadOffset, cmdOffset);
-    this.device.queue.writeBuffer(this.cmdBufferGPU, 0, cmd, 0, cmdOffset + cmdSize * 2);
-    await this.RunCompute("p2p", [this.particleBufferGPU, this.accelBufferGPU, this.cmdBufferGPU]);
-
-
+    this.device.queue.writeBuffer(this.cmdBufferGPU, 0, cmd, 0, cmdCount * 2);
+    await this.p2p_ApplyAccel(cmd, cmdCount);
     if (this.debug) {
-      await this.readBufferGPU.mapAsync(GPUMapMode.READ);
-      const handle = this.readBufferGPU.getMappedRange();
-      this.accelBuffer = new Float32Array(handle);
-      // this.readBufferGPU.unmap();
+      // await this.readBufferGPU.mapAsync(GPUMapMode.READ);
+      // const handle = this.readBufferGPU.getMappedRange();
+      // this.accelBuffer = new Float32Array(handle);
+      // // this.readBufferGPU.unmap();
     }
   }
 
-  CmdThread(cmd: Uint32Array, cmdSize: number, cmdCounts: Array<number>, threadOffset: number, cmdOffset) {
-
-    const targetCmdPerThread = cmdSize / this.maxGPUThread;
-    let thread = 0;
-    let currentCount = 0;
-    let totalCount = 0;
-    for (const cmdCount of cmdCounts) {
-      let test = cmd[cmdOffset + totalCount * 2];
-      for (let i = 0; i < cmdCount; i++) {
-        let v = cmd[cmdOffset + totalCount * 2 + i * 2];
-        if (test != v) { throw `[0]${test} [${i}]${v}`; }
-      }
-      currentCount += cmdCount;
-      if (currentCount > targetCmdPerThread) {
-        cmd[threadOffset + thread * 2] = cmdOffset + totalCount * 2;
-        cmd[threadOffset + thread * 2 + 1] = currentCount;
-        totalCount += currentCount;
-        currentCount = 0;
-        thread++;
-      }
-
+  async p2p_ApplyAccel(cmdBuffer: Uint32Array, length: number) {
+    this.uniformBuffer.set([length]);
+    this.device.queue.writeBuffer(
+      this.uniformBufferGPU,
+      0,
+      this.uniformBuffer
+    );
+    await this.RunCompute("p2p",
+      [this.uniformBufferGPU, this.particleBufferGPU, this.accelBufferGPU, this.cmdBufferGPU],
+      this.maxWorkgroupCount
+    );
+    //console.log("applyaccel");
+    await this.readBufferGPU.mapAsync(GPUMapMode.READ);
+    const handle = this.readBufferGPU.getMappedRange();
+    let tempAccelBuffer = new Float32Array(handle);
+    // console.log(cmdBuffer);
+    // console.log(tempAccelBuffer);
+    for (let i = 0; i < length; i++) {
+      let index = cmdBuffer[i * 2];
+      this.accelBuffer[index * 3] += tempAccelBuffer[i * 3];
+      this.accelBuffer[index * 3 + 1] += tempAccelBuffer[i * 3 + 1];
+      this.accelBuffer[index * 3 + 2] += tempAccelBuffer[i * 3 + 2];
     }
-    console.log(targetCmdPerThread);
-    console.log(cmdCounts);
-    console.log(cmd)
-    console.log(cmdSize);
+    this.readBufferGPU.unmap();
   }
 
-  async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>) {
+
+
+  async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>, workgroupCount = 1, readBuffer = true) {
     const shaderModule = this.device.createShaderModule({
       code: wgsl,
     })
@@ -147,14 +151,16 @@ export class KernelWgpu implements IKernel {
     const computePassEncoder = commandEncoder.beginComputePass();
     computePassEncoder.setPipeline(computePipeline);
     computePassEncoder.setBindGroup(0, bindGroup);
-    computePassEncoder.dispatchWorkgroups(256, 1);
+    computePassEncoder.dispatchWorkgroups(workgroupCount);
     computePassEncoder.end();
-    if (this.debug) {
+
+    if (readBuffer) {
       commandEncoder.copyBufferToBuffer(this.accelBufferGPU, 0, this.readBufferGPU, 0, this.particleCount * 4 * 3);
     }
-
     const gpuCommands = commandEncoder.finish();
     this.device.queue.submit([gpuCommands]);
-    await this.device.queue.onSubmittedWorkDone();
+    if (!readBuffer) {
+      await this.device.queue.onSubmittedWorkDone();
+    }
   }
 }
