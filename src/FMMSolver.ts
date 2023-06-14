@@ -328,7 +328,7 @@ export class FMMSolver {
     constructor(particleBuffer: Float32Array, kernelName: string) {
         const TKernel = { "wgpu": KernelWgpu, "ts": KernelTs }[kernelName];
         if (!TKernel) throw "Unknown Kernel: " + kernelName;
-        console.log("Kernel: " + kernelName);
+        console.log("Create with kernel: " + kernelName);
         this.kernel = new TKernel();
         this.particleBuffer = particleBuffer;
         this.particleCount = particleBuffer.length / 4;
