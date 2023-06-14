@@ -16,15 +16,44 @@ async function main() {
     const nodes = await GetNodes(10000);
     const links = await GetLinks();
 
-    const solver = new FMMSolver(nodes,"wgpu");
-    await solver.main();
+    const tester = new Tester();
 
-    // const tester = new Tester();
-    // await tester.Test(solver);
+    const solver = new FMMSolver(nodes, "wgpu");
+    //await solver.main();
 
-    //const renderer = new NodeLinkRenderer();
-    //renderer.setData(nodes, links, null);
-    //await renderer.init(canvas);
+
+    await tester.Test(solver);
+    // try {
+    //     await tester.Test(solver);
+    // } catch (e) {
+    //     console.log("stop: " + e)
+    // }
+
+    const solver2 = new FMMSolver(nodes, "ts");
+    try {
+        await tester.Test(solver2);
+    } catch { }
+
+    
+    // const renderer = new NodeLinkRenderer();
+    // renderer.setData(nodes, links, null);
+    // await renderer.init(canvas);
 
 }
 main();
+
+
+
+function GenTestNodes() {
+    const rc = 8;
+    const testNodes = new Float32Array(rc * rc * 4);
+    for (let i = 0; i < rc * rc; i++) {
+        const r = Math.floor(i / rc);
+        const c = i % rc;
+        testNodes[i * 4] = r;
+        testNodes[i * 4 + 1] = c;
+        testNodes[i * 4 + 2] = 0.0;
+        testNodes[i * 4 + 3] = 1.0;
+    }
+    return testNodes;
+}
