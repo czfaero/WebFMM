@@ -30,8 +30,8 @@ export class Tester {
         //   // P2P
         instance.getInteractionListP2P(numBoxIndex, numLevel);
 
-        VerifyIntIntBuffer("data-p2p-list.bin", instance.interactionList);
-        
+        await VerifyIntIntBuffer("data-p2p-list.bin", instance.interactionList);
+
         await instance.kernel.Init(instance.particleBuffer);
 
         let time_p2p = performance.now();
@@ -39,7 +39,7 @@ export class Tester {
         time_p2p = performance.now() - time_p2p;
         console.log(`time p2p: ${time_p2p.toFixed(2)} ms`);
 
-        VerifyFloatBuffer("data-p2p.bin", instance.kernel.accelBuffer);
+        await VerifyFloatBuffer("data-p2p.bin", instance.kernel.accelBuffer);
     }
 }
 
