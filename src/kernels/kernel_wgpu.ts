@@ -60,7 +60,7 @@ export class KernelWgpu implements IKernel {
     this.device.queue.writeBuffer(this.particleBufferGPU, 0, particleBuffer);
   }
   async p2p(numBoxIndex: number, interactionList: any, numInteraction: any, particleOffset: any) {
-
+    this.debug_p2p_call_count = 0;
     let cmdCount = 0;
     const maxCmdCount = this.accelBuffer.length / 3;
     const cmd = new Uint32Array(maxCmdCount * 2);
@@ -95,10 +95,14 @@ export class KernelWgpu implements IKernel {
       // const handle = this.readBufferGPU.getMappedRange();
       // this.accelBuffer = new Float32Array(handle);
       // // this.readBufferGPU.unmap();
+      console.log(`debug_p2p_call_count: ${this.debug_p2p_call_count}`);
     }
+    console.log(`debug_p2p_call_count: ${this.debug_p2p_call_count}`);
   }
 
+  debug_p2p_call_count: number;
   async p2p_ApplyAccel(cmdBuffer: Uint32Array, length: number) {
+    this.debug_p2p_call_count++;
     this.uniformBuffer.set([length]);
     this.device.queue.writeBuffer(
       this.uniformBufferGPU,
