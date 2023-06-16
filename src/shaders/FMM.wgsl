@@ -64,9 +64,9 @@ fn p2p(@builtin(global_invocation_id) id : vec3<u32>) {
 
   let i = cmd[thread*2];
   let jj = cmd[thread*2+1];
-  let start=particleOffset[jj*2];
-  let end=particleOffset[jj*2+1];
-  for(var j=start;j<end;j++){
+  let start = particleOffset[jj*2];
+  let end = particleOffset[jj*2+1];
+  for(var j = start; j <= end; j++){
     let a = getParticle(i);
     let b = getParticle(j);
     let r = p2p_core(a,b);
