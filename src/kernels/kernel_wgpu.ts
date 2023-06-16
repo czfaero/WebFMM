@@ -23,6 +23,8 @@ export class KernelWgpu implements IKernel {
   uniformBufferSize: number;
   uniformBuffer: Uint32Array;
   uniformBufferGPU: GPUBuffer;
+  particleOffsetGPU: GPUBuffer;
+
   async Init(particleBuffer: Float32Array) {
     this.particleCount = particleBuffer.length / 4;
     this.accelBuffer = new Float32Array(this.particleCount * 3);
@@ -61,6 +63,18 @@ export class KernelWgpu implements IKernel {
   }
   async p2p(numBoxIndex: number, interactionList: any, numInteraction: any, particleOffset: any) {
     this.debug_p2p_call_count = 0;
+
+    const particleOffsetBuffer = new Uint32Array(numBoxIndex * 2);
+    for (let i = 0; i < numBoxIndex; i++) {
+      particleOffsetBuffer[i * 2] = particleOffset[0][i];
+      particleOffsetBuffer[i * 2 + 1] = particleOffset[1][i];
+    }
+    this.particleOffsetGPU = this.device.createBuffer({
+      size: particleOffsetBuffer.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+    this.device.queue.writeBuffer(this.particleOffsetGPU, 0, particleOffsetBuffer);
+
     let cmdCount = 0;
     const maxCmdCount = this.accelBuffer.length / 3;
     const cmd = new Uint32Array(maxCmdCount * 2);
@@ -72,17 +86,14 @@ export class KernelWgpu implements IKernel {
       for (let i = particleOffset[0][ii]; i <= particleOffset[1][ii]; i++) {
         for (let ij = 0; ij < numInteraction[ii]; ij++) {
           const jj = interactionList[ii][ij];
-          for (let j = particleOffset[0][jj]; j <= particleOffset[1][jj]; j++) {
-            //calc
-            cmd[cmdCount * 2] = i;
-            cmd[cmdCount * 2 + 1] = j;
-            cmdCount++;
-            if (cmdCount == maxCmdCount) {
-              this.device.queue.writeBuffer(this.cmdBufferGPU, 0, cmd);
-              await this.p2p_ApplyAccel(cmd, cmdCount);
-              cmdCount = 0;
-              cmd.fill(0);
-            }
+          cmd[cmdCount * 2] = i;
+          cmd[cmdCount * 2 + 1] = jj;
+          cmdCount++;
+          if (cmdCount == maxCmdCount) {
+            this.device.queue.writeBuffer(this.cmdBufferGPU, 0, cmd);
+            await this.p2p_ApplyAccel(cmd, cmdCount);
+            cmdCount = 0;
+            cmd.fill(0);
           }
         }
       }
@@ -110,7 +121,7 @@ export class KernelWgpu implements IKernel {
       this.uniformBuffer
     );
     await this.RunCompute("p2p",
-      [this.uniformBufferGPU, this.particleBufferGPU, this.accelBufferGPU, this.cmdBufferGPU],
+      [this.uniformBufferGPU, this.particleBufferGPU, this.accelBufferGPU, this.cmdBufferGPU, this.particleOffsetGPU],
       this.maxWorkgroupCount
     );
     //console.log("applyaccel");
