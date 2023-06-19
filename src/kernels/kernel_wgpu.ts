@@ -13,13 +13,12 @@ export class KernelWgpu implements IKernel {
   adapter: GPUAdapter;
   device: GPUDevice;
   particleBufferGPU: GPUBuffer;
-  accelBufferGPU: GPUBuffer;
+  resultBufferGPU: GPUBuffer;
   commandBufferGPU: GPUBuffer;
   readBufferGPU: GPUBuffer;
   maxThreadCount: number;
   maxWorkgroupCount: number;
   accelBuffer: Float32Array;
-  accelBufferSize: number;
   uniformBufferSize: number;
   uniformBuffer: Uint32Array;
   uniformBufferGPU: GPUBuffer;
@@ -30,7 +29,6 @@ export class KernelWgpu implements IKernel {
   async Init(particleBuffer: Float32Array) {
     this.particleCount = particleBuffer.length / 4;
     this.accelBuffer = new Float32Array(this.particleCount * 3);
-    this.accelBufferSize = this.accelBuffer.byteLength;
     this.adapter = await navigator.gpu.requestAdapter();
     this.device = await this.adapter.requestDevice();
     // to-do: check limit
@@ -42,15 +40,6 @@ export class KernelWgpu implements IKernel {
     this.particleBufferGPU = this.device.createBuffer({
       size: particleBuffer.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-    });
-    this.accelBufferGPU = this.device.createBuffer({
-      size: this.accelBufferSize,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-    });
-
-    this.readBufferGPU = this.device.createBuffer({
-      size: this.accelBufferSize,
-      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
 
     this.uniformBuffer = new Uint32Array(1);
@@ -66,8 +55,6 @@ export class KernelWgpu implements IKernel {
     if (this.debug) {
       this.debug_info = {};
       this.debug_info["particleBufferGPU"] = this.particleBufferGPU.size;
-      this.debug_info["accelBufferGPU"] = this.accelBufferGPU.size;
-      this.debug_info["readBufferGPU"] = this.readBufferGPU.size;
       this.debug_info["uniformBufferGPU"] = this.uniformBufferGPU.size;
     }
   }
@@ -90,19 +77,32 @@ export class KernelWgpu implements IKernel {
     this.device.queue.writeBuffer(this.particleOffsetGPU, 0, particleOffsetBuffer);
 
     let commandCount = 0;
-    const maxCmdCount = this.accelBuffer.length / 3;
-    const command = new Uint32Array(maxCmdCount * 2);
+    const commandSize = 2;
+    const maxCommandCount = this.particleCount * 2;
+    if (maxCommandCount > this.maxThreadCount * this.maxWorkgroupCount) {
+      throw `Thread Count (${maxCommandCount}) > MaxThread(${this.maxThreadCount * this.maxWorkgroupCount})`;
+    }
+    const command = new Uint32Array(maxCommandCount * commandSize);
     this.commandBufferGPU = this.device.createBuffer({
       size: command.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
 
+    this.resultBufferGPU = this.device.createBuffer({
+      size: maxCommandCount * 3 * SIZEOF_32,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+    });
+    this.readBufferGPU = this.device.createBuffer({
+      size: this.resultBufferGPU.size,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+    });
 
     if (this.debug) {
       this.debug_info["commandBufferGPU"] = this.commandBufferGPU.size;
       this.debug_info["particleOffsetGPU"] = this.particleOffsetGPU.size;
+      this.debug_info["resultBufferGPU"] = this.resultBufferGPU.size;
+      this.debug_info["readBufferGPU"] = this.readBufferGPU.size;
     }
-
 
     for (let ii = 0; ii < numBoxIndex; ii++) {
       for (let i = particleOffset[0][ii]; i <= particleOffset[1][ii]; i++) {
@@ -111,7 +111,7 @@ export class KernelWgpu implements IKernel {
           command[commandCount * 2] = i;
           command[commandCount * 2 + 1] = jj;
           commandCount++;
-          if (commandCount == maxCmdCount) {
+          if (commandCount == maxCommandCount) {
             this.device.queue.writeBuffer(this.commandBufferGPU, 0, command);
             await this.p2p_ApplyAccel(command, commandCount);
             commandCount = 0;
@@ -150,9 +150,9 @@ export class KernelWgpu implements IKernel {
       0,
       this.uniformBuffer
     );
-    // console.log(cmdBuffer);throw "pause";
+    //console.log(cmdBuffer); throw "pause";
     await this.RunCompute("p2p",
-      [this.uniformBufferGPU, this.particleBufferGPU, this.accelBufferGPU, this.commandBufferGPU, this.particleOffsetGPU],
+      [this.uniformBufferGPU, this.particleBufferGPU, this.resultBufferGPU, this.commandBufferGPU, this.particleOffsetGPU],
       this.maxWorkgroupCount, true
     );
     //console.log("applyaccel");
@@ -201,7 +201,7 @@ export class KernelWgpu implements IKernel {
     computePassEncoder.end();
 
     if (readBuffer) {
-      commandEncoder.copyBufferToBuffer(this.accelBufferGPU, 0, this.readBufferGPU, 0, this.particleCount * 4 * 3);
+      commandEncoder.copyBufferToBuffer(this.resultBufferGPU, 0, this.readBufferGPU, 0, this.readBufferGPU.size);
     }
     const gpuCommands = commandEncoder.finish();
     this.device.queue.submit([gpuCommands]);
