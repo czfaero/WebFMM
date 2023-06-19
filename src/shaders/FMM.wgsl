@@ -61,6 +61,9 @@ fn p2p(@builtin(global_invocation_id) id : vec3<u32>) {
 
   if(thread >= uniforms.commandCount){return;}
 
+  accelBuffer[thread*3] = 0;
+  accelBuffer[thread*3+1] = 0;
+  accelBuffer[thread*3+2] = 0;
 
   let i = command[thread*2]; //  index of particle
   let jj = command[thread*2+1]; // index of box
