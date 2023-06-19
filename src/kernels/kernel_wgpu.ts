@@ -14,7 +14,7 @@ export class KernelWgpu implements IKernel {
   device: GPUDevice;
   particleBufferGPU: GPUBuffer;
   accelBufferGPU: GPUBuffer;
-  cmdBufferGPU: GPUBuffer;
+  commandBufferGPU: GPUBuffer;
   readBufferGPU: GPUBuffer;
   maxThreadCount: number;
   maxWorkgroupCount: number;
@@ -24,6 +24,8 @@ export class KernelWgpu implements IKernel {
   uniformBuffer: Uint32Array;
   uniformBufferGPU: GPUBuffer;
   particleOffsetGPU: GPUBuffer;
+
+  debug_info: any;
 
   async Init(particleBuffer: Float32Array) {
     this.particleCount = particleBuffer.length / 4;
@@ -60,9 +62,21 @@ export class KernelWgpu implements IKernel {
     });
 
     this.device.queue.writeBuffer(this.particleBufferGPU, 0, particleBuffer);
+
+    if (this.debug) {
+      this.debug_info = {};
+      this.debug_info["particleBufferGPU"] = this.particleBufferGPU.size;
+      this.debug_info["accelBufferGPU"] = this.accelBufferGPU.size;
+      this.debug_info["readBufferGPU"] = this.readBufferGPU.size;
+      this.debug_info["uniformBufferGPU"] = this.uniformBufferGPU.size;
+    }
   }
   async p2p(numBoxIndex: number, interactionList: any, numInteraction: any, particleOffset: any) {
-    this.debug_p2p_call_count = 0;
+    if (this.debug) {
+      this.debug_p2p_call_count = 0;
+      this.debug_info["events"] = [];
+      this.debug_info["events"].push({ time: performance.now(), tag: "start" });
+    }
 
     const particleOffsetBuffer = new Uint32Array(numBoxIndex * 2);
     for (let i = 0; i < numBoxIndex; i++) {
@@ -75,54 +89,71 @@ export class KernelWgpu implements IKernel {
     });
     this.device.queue.writeBuffer(this.particleOffsetGPU, 0, particleOffsetBuffer);
 
-    let cmdCount = 0;
+    let commandCount = 0;
     const maxCmdCount = this.accelBuffer.length / 3;
-    const cmd = new Uint32Array(maxCmdCount * 2);
-    this.cmdBufferGPU = this.device.createBuffer({
-      size: cmd.byteLength,
+    const command = new Uint32Array(maxCmdCount * 2);
+    this.commandBufferGPU = this.device.createBuffer({
+      size: command.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
+
+
+    if (this.debug) {
+      this.debug_info["commandBufferGPU"] = this.commandBufferGPU.size;
+      this.debug_info["particleOffsetGPU"] = this.particleOffsetGPU.size;
+    }
+
+
     for (let ii = 0; ii < numBoxIndex; ii++) {
       for (let i = particleOffset[0][ii]; i <= particleOffset[1][ii]; i++) {
         for (let ij = 0; ij < numInteraction[ii]; ij++) {
           const jj = interactionList[ii][ij];
-          cmd[cmdCount * 2] = i;
-          cmd[cmdCount * 2 + 1] = jj;
-          cmdCount++;
-          if (cmdCount == maxCmdCount) {
-            this.device.queue.writeBuffer(this.cmdBufferGPU, 0, cmd);
-            await this.p2p_ApplyAccel(cmd, cmdCount);
-            cmdCount = 0;
-            cmd.fill(0);
+          command[commandCount * 2] = i;
+          command[commandCount * 2 + 1] = jj;
+          commandCount++;
+          if (commandCount == maxCmdCount) {
+            this.device.queue.writeBuffer(this.commandBufferGPU, 0, command);
+            await this.p2p_ApplyAccel(command, commandCount);
+            commandCount = 0;
+            command.fill(0);
           }
         }
       }
     }
 
-    this.device.queue.writeBuffer(this.cmdBufferGPU, 0, cmd, 0, cmdCount * 2);
-    await this.p2p_ApplyAccel(cmd, cmdCount);
+    this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, commandCount * 2);
+    await this.p2p_ApplyAccel(command, commandCount);
+    this.debug_info["events"].push({ time: performance.now(), tag: "end" });
+
     if (this.debug) {
       // await this.readBufferGPU.mapAsync(GPUMapMode.READ);
       // const handle = this.readBufferGPU.getMappedRange();
       // this.accelBuffer = new Float32Array(handle);
       // // this.readBufferGPU.unmap();
       console.log(`debug_p2p_call_count: ${this.debug_p2p_call_count}`);
+      const startTime = this.debug_info["events"][0].time;
+      this.debug_info["events"].forEach(o => o.time -= startTime);
+      //console.log(JSON.stringify(this.debug_info))
+      console.log(this.debug_info);
     }
-    console.log(`debug_p2p_call_count: ${this.debug_p2p_call_count}`);
   }
 
   debug_p2p_call_count: number;
-  async p2p_ApplyAccel(cmdBuffer: Uint32Array, length: number) {
-    this.debug_p2p_call_count++;
-    this.uniformBuffer.set([length]);
+  async p2p_ApplyAccel(cmdBuffer: Uint32Array, commandCount: number) {
+    if (this.debug) {
+      this.debug_info["events"].push({ time: performance.now(), tag: "prepare submit", i: this.debug_p2p_call_count, thread_count: commandCount });
+      this.debug_p2p_call_count++;
+    }
+    this.uniformBuffer.set([commandCount]);
     this.device.queue.writeBuffer(
       this.uniformBufferGPU,
       0,
       this.uniformBuffer
     );
+    // console.log(cmdBuffer);throw "pause";
     await this.RunCompute("p2p",
-      [this.uniformBufferGPU, this.particleBufferGPU, this.accelBufferGPU, this.cmdBufferGPU, this.particleOffsetGPU],
-      this.maxWorkgroupCount
+      [this.uniformBufferGPU, this.particleBufferGPU, this.accelBufferGPU, this.commandBufferGPU, this.particleOffsetGPU],
+      this.maxWorkgroupCount, true
     );
     //console.log("applyaccel");
     await this.readBufferGPU.mapAsync(GPUMapMode.READ);
@@ -130,7 +161,7 @@ export class KernelWgpu implements IKernel {
     let tempAccelBuffer = new Float32Array(handle);
     // console.log(cmdBuffer);
     // console.log(tempAccelBuffer);
-    for (let i = 0; i < length; i++) {
+    for (let i = 0; i < commandCount; i++) {
       let index = cmdBuffer[i * 2];
       this.accelBuffer[index * 3] += tempAccelBuffer[i * 3];
       this.accelBuffer[index * 3 + 1] += tempAccelBuffer[i * 3 + 1];

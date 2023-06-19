@@ -5,14 +5,14 @@ const inv4PI = 0.25/PI;
 const eps = 1e-6;
 
 struct Uniforms {
-  cmdCount:u32
+  commandCount:u32
 }
 
 
 @group(0) @binding(0) var<uniform> uniforms : Uniforms;
 @group(0) @binding(1) var<storage, read_write> particleBuffer: array<f32>;
 @group(0) @binding(2) var<storage, read_write> accelBuffer: array<f32>;
-@group(0) @binding(3) var<storage, read_write> cmd: array<u32>;
+@group(0) @binding(3) var<storage, read_write> command: array<u32>;
 @group(0) @binding(4) var<storage, read_write> particleOffset: array<u32>;
 
 fn cart2sph(d : vec3f) -> vec3f
@@ -59,11 +59,11 @@ fn p2p(@builtin(global_invocation_id) id : vec3<u32>) {
 
   let thread = id.x;
 
-  if(thread >= uniforms.cmdCount){return;}
+  if(thread >= uniforms.commandCount){return;}
 
 
-  let i = cmd[thread*2];
-  let jj = cmd[thread*2+1];
+  let i = command[thread*2]; //  index of particle
+  let jj = command[thread*2+1]; // index of box
   let start = particleOffset[jj*2];
   let end = particleOffset[jj*2+1];
   for(var j = start; j <= end; j++){
