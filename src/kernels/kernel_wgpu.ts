@@ -34,7 +34,7 @@ export class KernelWgpu implements IKernel {
     // to-do: check limit
     console.log(this.adapter);
     this.maxThreadCount = 256;
-    this.maxWorkgroupCount = 128;
+    this.maxWorkgroupCount = 256;
     // this.cmdBufferLength = this.maxThreadCount * this.maxWorkgroupCount * 2;// to-do: set a good value
     // this.cmdBufferSize = this.cmdBufferLength * SIZEOF_32;
     this.particleBufferGPU = this.device.createBuffer({
@@ -78,7 +78,7 @@ export class KernelWgpu implements IKernel {
 
     let commandCount = 0;
     const commandSize = 2;
-    const maxCommandCount = this.particleCount * 2;
+    const maxCommandCount = this.maxThreadCount * this.maxWorkgroupCount;
     if (maxCommandCount > this.maxThreadCount * this.maxWorkgroupCount) {
       throw `Thread Count (${maxCommandCount}) > MaxThread(${this.maxThreadCount * this.maxWorkgroupCount})`;
     }
