@@ -22,7 +22,7 @@ async function main() {
     //await solver.main();
 
 
-    await tester.Test(solver);
+    //await tester.Test(solver);
     // try {
     //     await tester.Test(solver);
     // } catch (e) {
@@ -32,9 +32,9 @@ async function main() {
     const solver2 = new FMMSolver(nodes, "ts");
     try {
         await tester.Test(solver2);
-    } catch { }
+    } catch (e) { throw e; }
 
-    
+
     // const renderer = new NodeLinkRenderer();
     // renderer.setData(nodes, links, null);
     // await renderer.init(canvas);

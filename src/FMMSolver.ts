@@ -323,15 +323,30 @@ export class FMMSolver {
         //     kernel.p2p(numBoxIndex);
         await this.kernel.p2p(numBoxIndex, this.interactionList, this.numInteraction, this.particleOffset);
 
+
+        await this.kernel.p2m(numBoxIndex, this.particleOffset);
     }
+    numExpansions: number;
+    numExpansion2: number;
+    numExpansion4: number;
+    numCoefficients: number;
+    DnmSize: number;
 
     constructor(particleBuffer: Float32Array, kernelName: string) {
         const TKernel = { "wgpu": KernelWgpu, "ts": KernelTs }[kernelName];
         if (!TKernel) throw "Unknown Kernel: " + kernelName;
         console.log("Create with kernel: " + kernelName);
-        this.kernel = new TKernel();
+        this.kernel = new TKernel(this);
         this.particleBuffer = particleBuffer;
         this.particleCount = particleBuffer.length / 4;
+
+
+        // constants
+        this.numExpansions = 10;
+        this.numExpansion2 = this.numExpansions * this.numExpansions;
+        this.numExpansion4 = this.numExpansion2 * this.numExpansion2;
+        this.numCoefficients = this.numExpansions * (this.numExpansions + 1) / 2;
+        this.DnmSize = (4 * this.numExpansion2 * this.numExpansions - this.numExpansions) / 3;
     }
 
 }

@@ -170,7 +170,8 @@ export class KernelWgpu implements IKernel {
     this.readBufferGPU.unmap();
   }
 
-
+  Mnm: Array<Float32Array>;
+  async p2m(numBoxIndex: number, particleOffset: any) { }
 
   async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>, workgroupCount = 1, readBuffer = true) {
     const shaderModule = this.device.createShaderModule({

@@ -4,6 +4,7 @@ export class Tester {
     constructor() {
     }
     async Test(instance: FMMSolver) {
+        console.log(instance);
         instance.kernel.debug = true;
         instance.setBoxSize();
         instance.setOptimumLevel();
@@ -40,6 +41,13 @@ export class Tester {
         console.log(`time p2p: ${time_p2p.toFixed(2)} ms`);
 
         await VerifyFloatBuffer("data-p2p.bin", instance.kernel.accelBuffer);
+
+        let time_p2m = performance.now();
+        await instance.kernel.p2m(numBoxIndex, instance.particleOffset);
+        time_p2m = performance.now() - time_p2m;
+        console.log(`time p2m: ${time_p2m.toFixed(2)} ms`);
+        await VerifyFloatBuffer2("data-p2m.bin", instance.kernel.Mnm, numBoxIndex);
+
     }
 }
 
@@ -111,6 +119,42 @@ async function VerifyFloatBuffer(name: string, data: Float32Array) {
         throw "Failure: " + name;
     }
 }
+
+// p2m
+async function VerifyFloatBuffer2(name: string, data: Array<Float32Array>, count: number) {
+    const rawData = await (await fetch(name)).arrayBuffer();
+    const expect = new Float32Array(rawData);
+
+    console.log("bin size:" + expect.length)
+    console.log(`Sample expect: ${Array.from(expect.subarray(0, 4)).map(n => n.toFixed(3)).join(' ')}`)
+    console.log(`Sample buffer: ${Array.from(data[0].subarray(0, 4)).map(n => n.toFixed(3)).join(' ')}`)
+
+    if (count * data[0].length != expect.length) {
+        console.log(data);
+        throw `${name} size: ${count * data[0].length}!=${expect.length}`;
+    }
+    let error_count = 0;
+    for (let c = 0; c < count; c++)
+        for (let i = 0; i < data.length; i++) {
+            const r = CompareNumber(expect[c * data[0].length + i], data[c][i]);
+            if (!r) {
+                error_count++;
+                console.log(`[${c},${i}]Expect: ${expect[c * data[0].length + i]} | Got: ${data[c][i]}`);
+                if (error_count > 10) {
+                    break;
+                }
+            }
+        }
+    if (error_count == 0) {
+        console.log("Success: " + name);
+    }
+    else {
+        console.log(expect);
+        console.log(data);
+        throw "Failure: " + name;
+    }
+}
+
 
 
 async function VerifyIntBuffer(name: string, data: Int32Array) {
