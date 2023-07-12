@@ -19,7 +19,7 @@ export class KernelTs implements IKernel {
     particleBuffer: Float32Array; // vec4
     particleCount: number;
 
-    factorial: Float32Array;
+
     constructor(core: FMMSolver) {
         this.debug = false;
         this.core = core;
@@ -33,6 +33,7 @@ export class KernelTs implements IKernel {
     }
     Anm: Float32Array;
     anm: Float32Array;
+    factorial: Float32Array;
     precalc() {
         const core = this.core;
         this.Anm = new Float32Array(core.numExpansion4);
