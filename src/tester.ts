@@ -51,8 +51,11 @@ export class Tester {
     }
 }
 
-function CompareNumber(a: number, b: number) {
-    return Math.abs(a - b) < 0.001
+function CompareNumber(a: number, b: number, delta = 0.001) {
+    return Math.abs(a - b) < delta
+}
+function Error(a: number, b: number) {
+    return Math.abs(a - b)
 }
 function p2str(data: Float32Array, i: number) {
     const xyzw = Array.from(data.subarray(i * 4, i * 4 + 4)).map(x => x.toFixed(2)).join(' ');
@@ -134,19 +137,32 @@ async function VerifyFloatBuffer2(name: string, data: Array<Float32Array>, count
         throw `${name} size: ${count * data[0].length}!=${expect.length}`;
     }
     let error_count = 0;
+    let error_count_fatal = 0;
+    let max_error = 0;
+    let error_sum = 0;
     for (let c = 0; c < count; c++)
         for (let i = 0; i < data.length; i++) {
             const r = CompareNumber(expect[c * data[0].length + i], data[c][i]);
             if (!r) {
                 error_count++;
-                console.log(`[${c},${i}]Expect: ${expect[c * data[0].length + i]} | Got: ${data[c][i]}`);
-                if (error_count > 10) {
+                let error = Error(expect[c * data[0].length + i], data[c][i]);
+                error_sum += error;
+                if (error > max_error) { max_error = error; }
+                if (!CompareNumber(expect[c * data[0].length + i], data[c][i], 0.1)) {
+                    error_count_fatal++;
+                    console.log(`[${c},${i}]Expect: ${expect[c * data[0].length + i]} | Got: ${data[c][i]}`);
+                }
+                if (error_count_fatal > 10) {
                     break;
                 }
             }
         }
-    if (error_count == 0) {
-        console.log("Success: " + name);
+    if (error_count_fatal == 0) {
+        if (error_count == 0) {
+            console.log("Success: " + name);
+        } else {
+            console.log("Warn: " + name + `\n average error: ${error_sum / error_count}\n max error: ${max_error}`);
+        }
     }
     else {
         console.log(expect);

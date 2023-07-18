@@ -1,14 +1,18 @@
-import wgsl from '../shaders/FMM.wgsl';
+import wgsl_p2p from '../shaders/FMM_p2p.wgsl';
+import wgsl_p2m from '../shaders/FMM_p2m.wgsl';
 
 import { IKernel } from './kernel';
+import { FMMSolver } from '../FMMSolver';
 
 const SIZEOF_32 = 4;
 
 export class KernelWgpu implements IKernel {
+  core: FMMSolver;
   debug: boolean;
   particleCount: number;
-  constructor() {
+  constructor(core: FMMSolver) {
     this.debug = false;
+    this.core = core;
   }
   adapter: GPUAdapter;
   device: GPUDevice;
@@ -20,12 +24,13 @@ export class KernelWgpu implements IKernel {
   maxWorkgroupCount: number;
   accelBuffer: Float32Array;
   uniformBufferSize: number;
-  uniformBuffer: Uint32Array;
   uniformBufferGPU: GPUBuffer;
   particleOffsetGPU: GPUBuffer;
+  factorialGPU: GPUBuffer;
 
   debug_info: any;
 
+  shaders: any;
   async Init(particleBuffer: Float32Array) {
     this.particleCount = particleBuffer.length / 4;
     this.accelBuffer = new Float32Array(this.particleCount * 3);
@@ -42,15 +47,32 @@ export class KernelWgpu implements IKernel {
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
 
-    this.uniformBuffer = new Uint32Array(1);
-    this.uniformBufferSize = this.uniformBuffer.byteLength;
+
+    this.uniformBufferSize = 16 * SIZEOF_32;// see shader
 
     this.uniformBufferGPU = this.device.createBuffer({
       size: this.uniformBufferSize,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
+    this.factorialGPU = this.device.createBuffer({
+      size: this.core.numExpansions * 2 * SIZEOF_32,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
     this.device.queue.writeBuffer(this.particleBufferGPU, 0, particleBuffer);
+
+
+    this.shaders = {
+      p2p: wgsl_p2p,
+      p2m: wgsl_p2m,
+    }
+    const nameList = "p2p p2m".split(" ");
+    for (const n of nameList) {
+      this.shaders[n] = this.device.createShaderModule({
+        code: this.shaders[n],
+      })
+    }
 
     if (this.debug) {
       this.debug_info = {};
@@ -90,7 +112,7 @@ export class KernelWgpu implements IKernel {
 
     this.resultBufferGPU = this.device.createBuffer({
       size: maxCommandCount * 3 * SIZEOF_32,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
     this.readBufferGPU = this.device.createBuffer({
       size: this.resultBufferGPU.size,
@@ -144,11 +166,12 @@ export class KernelWgpu implements IKernel {
       this.debug_info["events"].push({ time: performance.now(), tag: "prepare submit", i: this.debug_p2p_call_count, thread_count: commandCount });
       this.debug_p2p_call_count++;
     }
-    this.uniformBuffer.set([commandCount]);
+    const uniformBuffer = new Uint32Array(4);
+    uniformBuffer.set([commandCount]);
     this.device.queue.writeBuffer(
       this.uniformBufferGPU,
       0,
-      this.uniformBuffer
+      uniformBuffer
     );
     //console.log(cmdBuffer); throw "pause";
     await this.RunCompute("p2p",
@@ -171,12 +194,67 @@ export class KernelWgpu implements IKernel {
   }
 
   Mnm: Array<Float32Array>;
-  async p2m(numBoxIndex: number, particleOffset: any) { }
+  async p2m(numBoxIndex: number, particleOffset: any) {
+
+    let fact = 1.0;
+    let factorial = new Float32Array(2 * this.core.numExpansions);
+    for (let m = 0; m < factorial.length; m++) {
+      factorial[m] = fact;
+      fact = fact * (m + 1);
+    }
+    this.device.queue.writeBuffer(this.factorialGPU, 0, factorial);
+
+    // command (boxId)
+    let command = new Uint32Array(numBoxIndex);
+    for (let i = 0; i < numBoxIndex; i++) {
+      command[i] = this.core.boxIndexFull[i];
+    }
+    this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, numBoxIndex);
+
+    const boxSize = this.core.rootBoxSize / (1 << this.core.maxLevel);
+
+    let maxParticlePerBox = 0;
+    for (let jj = 0; jj < numBoxIndex; jj++) {
+      let c = particleOffset[1][jj] - particleOffset[0][jj] + 1;
+      if (c > maxParticlePerBox) { maxParticlePerBox = c; }
+    }
+
+    const uniformBuffer = new Float32Array(4);
+    uniformBuffer[0] = boxSize;
+    uniformBuffer[1] = this.core.boxMinX;
+    uniformBuffer[2] = this.core.boxMinY;
+    uniformBuffer[3] = this.core.boxMinZ;
+    const uniformBuffer2 = new Uint32Array(3);
+    uniformBuffer2[0] = numBoxIndex;
+    uniformBuffer2[1] = this.core.numExpansions;
+    uniformBuffer2[2] = maxParticlePerBox;
+    this.device.queue.writeBuffer(this.uniformBufferGPU, 0, uniformBuffer);
+    this.device.queue.writeBuffer(this.uniformBufferGPU, uniformBuffer.byteLength, uniformBuffer2);
+
+    await this.RunCompute("p2m",
+      [this.uniformBufferGPU, this.particleBufferGPU, this.resultBufferGPU, this.commandBufferGPU, this.particleOffsetGPU, this.factorialGPU],
+      numBoxIndex, true
+    );
+
+    if (this.debug) {
+      await this.readBufferGPU.mapAsync(GPUMapMode.READ);
+      const handle = this.readBufferGPU.getMappedRange();
+      let tempReadBuffer = new Float32Array(handle);
+      this.Mnm = new Array(this.core.numBoxIndexTotal);
+      for (let i = 0; i < numBoxIndex; i++) {
+        const MnmVec = new Float32Array(this.core.numCoefficients * 2);
+        for (let j = 0; j < this.core.numCoefficients * 2; j++) {
+          MnmVec[j] = tempReadBuffer[i * this.core.numCoefficients * 2 + j];
+        }
+        this.Mnm[i] = MnmVec;
+      }
+      this.readBufferGPU.unmap();
+    }
+
+  }
 
   async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>, workgroupCount = 1, readBuffer = true) {
-    const shaderModule = this.device.createShaderModule({
-      code: wgsl,
-    })
+    const shaderModule = this.shaders[entryPoint];
     const computePipeline = this.device.createComputePipeline({
       layout: 'auto', // infer from shader code.
       compute: {
@@ -195,6 +273,7 @@ export class KernelWgpu implements IKernel {
       entries: entries
     });
     const commandEncoder = this.device.createCommandEncoder();
+    commandEncoder.clearBuffer(this.resultBufferGPU);
     const computePassEncoder = commandEncoder.beginComputePass();
     computePassEncoder.setPipeline(computePipeline);
     computePassEncoder.setBindGroup(0, bindGroup);

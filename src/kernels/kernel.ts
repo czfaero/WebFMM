@@ -1,6 +1,7 @@
 import { FMMSolver } from "../FMMSolver";
 
 export interface IKernel {
+    core: FMMSolver;
     debug: boolean;
     accelBuffer: Float32Array;
     Init: (particleBuffer: Float32Array) => Promise<void>;

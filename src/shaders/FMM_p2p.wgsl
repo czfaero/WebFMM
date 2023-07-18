@@ -5,7 +5,7 @@ const inv4PI = 0.25/PI;
 const eps = 1e-6;
 
 struct Uniforms {
-  commandCount:u32
+  commandCount: u32
 }
 
 
@@ -14,31 +14,6 @@ struct Uniforms {
 @group(0) @binding(2) var<storage, read_write> resultBuffer: array<f32>;
 @group(0) @binding(3) var<storage, read_write> command: array<u32>;
 @group(0) @binding(4) var<storage, read_write> particleOffset: array<u32>;
-
-fn cart2sph(d : vec3f) -> vec3f
-{
-  var r = sqrt(d.x * d.x + d.y * d.y + d.z * d.z) + eps;
-  var theta = acos(d.z / r);
-  var phi:f32;
-  if (abs(d.x) + abs(d.y) < eps)
-  {
-    phi = 0;
-  }
-  else if (abs(d.x) < eps)
-  {
-    phi = d.y / abs(d.y) * PI * 0.5;
-  }
-  else if (d.x > 0)
-  {
-    phi = atan(d.y / d.x);
-  }
-  else
-  {
-    phi = atan(d.y / d.x) + PI;
-  }
-  return vec3f(r,theta,phi);
-}
-
 
 fn p2p_core(a : vec4<f32>, b : vec4<f32>) -> vec3f
 {
