@@ -19,15 +19,12 @@ async function main() {
     const tester = new Tester();
 
     const solver = new FMMSolver(nodes, "wgpu");
-    //await solver.main();
-
-
-    //await tester.Test(solver);
-    // try {
-    //     await tester.Test(solver);
-    // } catch (e) {
-    //     console.log("stop: " + e)
-    // }
+    try {
+        await tester.Test(solver);
+    } catch (e) {
+        //throw e;
+        console.log("stop: " + e)
+    }
 
     const solver2 = new FMMSolver(nodes, "ts");
     try {
