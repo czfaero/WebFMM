@@ -13,7 +13,7 @@ async function main() {
         throw msg;
     }
     const canvas = document.querySelector("canvas") as HTMLCanvasElement;
-    const nodes = await GetNodes(10000);
+    const nodes = await GetNodes(1e5);
     const links = await GetLinks();
 
     const tester = new Tester();

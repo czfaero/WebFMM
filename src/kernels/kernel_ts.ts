@@ -4,13 +4,37 @@ import { IKernel } from './kernel';
 const eps = 1e-6;
 const inv4PI = 0.25 / Math.PI;
 
-function complex_exp(re: number, im: number) {
-    const tmp = Math.exp(re);
-    return {
-        re: Math.cos(im) * tmp,
-        im: Math.sin(im) * tmp
+const numRelativeBox = 512;        // max of relative box positioning
+
+class Complex {
+    re: number;
+    im: number;
+    multiply(cn2: Complex): Complex {
+        const cn1 = this;
+        return new Complex(
+            cn1.re * cn2.re - cn1.im * cn2.im,
+            cn1.re * cn2.im + cn1.im * cn2.re);
+    }
+    conj() {
+        return new Complex(this.re, -this.im);
+    }
+    exp() {
+        const tmp = Math.exp(this.re);
+        return new Complex(
+            Math.cos(this.im) * tmp,
+            Math.sin(this.im) * tmp
+        );
+    }
+
+    static fromBuffer(b: Float32Array, i: number): Complex {
+        return new Complex(b[i * 2], b[i * 2 + 1]);
+    };
+    constructor(re: number, im: number) {
+        this.re = re;
+        this.im = im;
     }
 }
+
 
 export class KernelTs implements IKernel {
     debug: boolean;
@@ -31,14 +55,46 @@ export class KernelTs implements IKernel {
         this.accelBuffer = new Float32Array(this.particleCount * 3);
         this.precalc();
     }
-    Anm: Float32Array;
-    anm: Float32Array;
+    /** [4 * numExpansion2]; for p2m */
     factorial: Float32Array;
+    /** complex [numBoxIndexLeaf][numCoefficients]; for  */
+    Lnm: Array<Float32Array>;
+    /** complex [numBoxIndexLeaf][numCoefficients]; for  */
+    LnmOld: Array<Float32Array>;
+    /** complex [numBoxIndexTotal][numCoefficients]; for  */
+    Mnm: Array<Float32Array>;
+    /** spherical harmonic; complex [4 * numExpansion2]; for m2m */
+    Ynm: Float32Array;
+    /** complex [2 * numRelativeBox][numExpansions][numExpansion2]; for rotation -> m2m */
+    Dnm: Array<Array<Float32Array>>;
+
+    // -----
+    /** [numExpansion4]; for m2l */
+    Anm: Float32Array;
+    /** [4 * numExpansion2]; for m2m l2l*/
+    anm: Float32Array;
     precalc() {
         const core = this.core;
         this.Anm = new Float32Array(core.numExpansion4);
         this.anm = new Float32Array(4 * core.numExpansion2);
         this.factorial = new Float32Array(4 * core.numExpansion2);
+        this.Lnm = new Array(core.numBoxIndexLeaf);
+        this.LnmOld = new Array(core.numBoxIndexLeaf);
+        this.Mnm = new Array(core.numBoxIndexTotal);
+        this.Ynm = new Float32Array(4 * core.numExpansion2 * 2);
+        this.Dnm = new Array(2 * numRelativeBox);
+        for (let i = 0; i < 2 * numRelativeBox; i++) {
+            this.Dnm[i] = new Array(core.numExpansions);
+            for (let j = 0; j < core.numExpansions; j++)
+                this.Dnm[i][j] = new Float32Array(core.numExpansion2 * 2);
+        }
+        /** [2][numExpansion4]; for Dnmd -> Dnm */
+        const anmk = [new Float32Array(core.numExpansion4), new Float32Array(core.numExpansion4)];
+        /** [numExpansion4]; for Dnm */
+        const Dnmd = new Float32Array(core.numExpansion4);
+        /** complex [numExpansion2]; for Dnm */
+        const expBeta = new Float32Array(core.numExpansion2 * 2);
+
         //   int n, m, nm, nabsm, j, k, nk, npn, nmn, npm, nmm, nmk, i, nmk1, nm1k, nmk2;
         //         vec3 < int > boxIndex3D;
         //         vec3 < double > dist;
@@ -84,155 +140,166 @@ export class KernelTs implements IKernel {
             }
         }
 
-        // let pn = 1;
-        // for (let m = 0; m < 2 * this.core.numExpansions; m++) {
-        //     let p = pn;
-        //     let npn = m * m + 2 * m;
-        //     let nmn = m * m;
-        //     Ynm[npn] = factorial[npn] * p;
-        //     Ynm[nmn] = conj(Ynm[npn]);
-        //     let p1 = p;
-        //     p = (2 * m + 1) * p;
-        //     for (let n = m + 1; n < 2 * this.core.numExpansions; n++) {
-        //         npm = n * n + n + m;
-        //         nmm = n * n + n - m;
-        //         Ynm[npm] = factorial[npm] * p;
-        //         Ynm[nmm] = conj(Ynm[npm]);
-        //         p2 = p1;
-        //         p1 = p;
-        //         p = ((2 * n + 1) * p1 - (n + m) * p2) / (n - m + 1);
-        //     }
-        //     pn = 0;
-        // }
+        let pn = 1;
+        for (let m = 0; m < 2 * this.core.numExpansions; m++) {
+            let p = pn;
+            let npn = m * m + 2 * m;
+            let nmn = m * m;
+            this.Ynm[npn * 2] = this.factorial[npn] * p;
+            this.Ynm[nmn * 2] = this.Ynm[npn * 2];//conj(Ynm[npn*2])
+            let p1 = p;
+            p = (2 * m + 1) * p;
+            for (let n = m + 1; n < 2 * this.core.numExpansions; n++) {
+                let npm = n * n + n + m;
+                let nmm = n * n + n - m;
+                this.Ynm[npm * 2] = this.factorial[npm] * p;
+                this.Ynm[nmm * 2] = this.Ynm[npm * 2];//conj(Ynm[npm*2]);
+                let p2 = p1;
+                p1 = p;
+                p = ((2 * n + 1) * p1 - (n + m) * p2) / (n - m + 1);
+            }
+            pn = 0;
+        }
 
-        // for (let n = 0; n < core.numExpansions; n++) {
-        //     for (let m = 1; m <= n; m++) {
-        //         anmd = n * (n + 1) - m * (m - 1);
-        //         for (k = 1 - m; k < m; k++) {
-        //             nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-        //             anmkd = ((double)(n * (n + 1) - k * (k + 1))) / (n * (n + 1) - m * (m - 1));
-        //             anmk[0][nmk] = -(m + k) / sqrt(anmd);
-        //             anmk[1][nmk] = sqrt(anmkd);
-        //         }
-        //     }
-        // }
+        for (let n = 0; n < core.numExpansions; n++) {
+            for (let m = 1; m <= n; m++) {
+                let anmd = n * (n + 1) - m * (m - 1);
+                for (let k = 1 - m; k < m; k++) {
+                    let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                    let anmkd = ((n * (n + 1) - k * (k + 1))) / (n * (n + 1) - m * (m - 1));// double
+                    anmk[0][nmk] = -(m + k) / Math.sqrt(anmd);
+                    anmk[1][nmk] = Math.sqrt(anmkd);
+                }
+            }
+        }
 
-        // for (let i = 0; i < numRelativeBox; i++) {
-        //     tree.unmorton(i, boxIndex3D);
-        //     dist.x = boxIndex3D.x - 3;
-        //     dist.y = boxIndex3D.y - 3;
-        //     dist.z = boxIndex3D.z - 3;
-        //     cart2sph(rho, alpha, beta, dist.x, dist.y, dist.z);
+        for (let i = 0; i < numRelativeBox; i++) {
+            let boxIndex3D = core.unmorton(i);
+            let dx = boxIndex3D.x - 3;
+            let dy = boxIndex3D.y - 3;
+            let dz = boxIndex3D.z - 3;
+            let { rho, alpha, beta } = this.cart2sph(dx, dy, dz);
 
-        //     sc = sin(alpha) / (1 + cos(alpha));
-        //     for (n = 0; n < 4 * numExpansions - 3; n++) {
-        //         expBeta[n] = exp((n - 2 * numExpansions + 2) * beta * I);
-        //     }
+            let sc = Math.sin(alpha) / (1 + Math.cos(alpha));
+            for (let n = 0; n < 4 * core.numExpansions - 3; n++) {
+                let c = new Complex(0, (n - 2 * core.numExpansions + 2) * beta);
+                let c2 = c.exp();
+                expBeta[n * 2] = c2.re;
+                expBeta[n * 2 + 1] = c2.im;
+            }
 
-        //     for (n = 0; n < numExpansions; n++) {
-        //         nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + n;
-        //         Dnmd[nmk] = pow(cos(alpha * 0.5), 2 * n);
-        //         for (k = n; k >= 1 - n; k--) {
-        //             nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k;
-        //             nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k - 1;
-        //             ank = ((double)n + k) / (n - k + 1);
-        //             Dnmd[nmk1] = sqrt(ank) * tan(alpha * 0.5) * Dnmd[nmk];
-        //         }
-        //         for (m = n; m >= 1; m--) {
-        //             for (k = m - 1; k >= 1 - m; k--) {
-        //                 nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-        //                 nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k + 1;
-        //                 nm1k = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + (m - 1) * (2 * n + 1) + k;
-        //                 Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
-        //             }
-        //         }
-        //     }
+            for (let n = 0; n < core.numExpansions; n++) {
+                let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + n;
+                Dnmd[nmk] = Math.pow(Math.cos(alpha * 0.5), 2 * n);
+                for (let k = n; k >= 1 - n; k--) {
+                    nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k;
+                    let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k - 1;
+                    let ank = (n + k) / (n - k + 1);
+                    Dnmd[nmk1] = Math.sqrt(ank) * Math.tan(alpha * 0.5) * Dnmd[nmk];
+                }
+                for (let m = n; m >= 1; m--) {
+                    for (let k = m - 1; k >= 1 - m; k--) {
+                        nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k + 1;
+                        let nm1k = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + (m - 1) * (2 * n + 1) + k;
+                        Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
+                    }
+                }
+            }
 
-        //     for (n = 1; n < numExpansions; n++) {
-        //         for (m = 0; m <= n; m++) {
-        //             for (k = -m; k <= -1; k++) {
-        //                 ek = pow(-1.0, k);
-        //                 nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-        //                 nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
-        //                 Dnmd[nmk] = ek * Dnmd[nmk];
-        //                 Dnmd[nmk1] = pow(-1.0, m + k) * Dnmd[nmk];
-        //             }
-        //             for (k = 0; k <= m; k++) {
-        //                 nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-        //                 nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + k * (2 * n + 1) + m;
-        //                 nmk2 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
-        //                 Dnmd[nmk1] = pow(-1.0, m + k) * Dnmd[nmk];
-        //                 Dnmd[nmk2] = Dnmd[nmk1];
-        //             }
-        //         }
-        //     }
 
-        //     for (n = 0; n < numExpansions; n++) {
-        //         for (m = 0; m <= n; m++) {
-        //             for (k = -n; k <= n; k++) {
-        //                 nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-        //                 nk = n * (n + 1) + k;
-        //                 Dnm[i][m][nk] = Dnmd[nmk] * expBeta[k + m + 2 * numExpansions - 2];
-        //             }
-        //         }
-        //     }
+            for (let n = 1; n < core.numExpansions; n++) {
+                for (let m = 0; m <= n; m++) {
+                    for (let k = -m; k <= -1; k++) {
+                        let ek = Math.pow(-1.0, k);
+                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
+                        Dnmd[nmk] = ek * Dnmd[nmk];
+                        Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
+                    }
+                    for (let k = 0; k <= m; k++) {
+                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + k * (2 * n + 1) + m;
+                        let nmk2 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
+                        Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
+                        Dnmd[nmk2] = Dnmd[nmk1];
+                    }
+                }
+            }
 
-        //     alpha = -alpha;
-        //     beta = -beta;
+            for (let n = 0; n < core.numExpansions; n++) {
+                for (let m = 0; m <= n; m++) {
+                    for (let k = -n; k <= n; k++) {
+                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nk = n * (n + 1) + k;
+                        let c = Complex.fromBuffer(expBeta, k + m + 2 * core.numExpansions - 2);
+                        this.Dnm[i][m][nk * 2] = Dnmd[nmk] * c.re;
+                        this.Dnm[i][m][nk * 2 + 1] = Dnmd[nmk] * c.im;
+                    }
+                }
+            }
 
-        //     sc = sin(alpha) / (1 + cos(alpha));
-        //     for (n = 0; n < 4 * numExpansions - 3; n++) {
-        //         expBeta[n] = exp((n - 2 * numExpansions + 2) * beta * I);
-        //     }
+            alpha = -alpha;
+            beta = -beta;
 
-        //     for (n = 0; n < numExpansions; n++) {
-        //         nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + n;
-        //         Dnmd[nmk] = pow(cos(alpha * 0.5), 2 * n);
-        //         for (k = n; k >= 1 - n; k--) {
-        //             nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k;
-        //             nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k - 1;
-        //             ank = ((double)n + k) / (n - k + 1);
-        //             Dnmd[nmk1] = sqrt(ank) * tan(alpha * 0.5) * Dnmd[nmk];
-        //         }
-        //         for (m = n; m >= 1; m--) {
-        //             for (k = m - 1; k >= 1 - m; k--) {
-        //                 nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-        //                 nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k + 1;
-        //                 nm1k = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + (m - 1) * (2 * n + 1) + k;
-        //                 Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
-        //             }
-        //         }
-        //     }
+            sc = Math.sin(alpha) / (1 + Math.cos(alpha));
+            for (let n = 0; n < 4 * core.numExpansions - 3; n++) {
+                let c = new Complex(0, (n - 2 * core.numExpansions + 2) * beta);
+                let c2 = c.exp();
+                expBeta[n * 2] = c2.re;
+                expBeta[n * 2 + 1] = c2.im;
+            }
 
-        //     for (n = 1; n < numExpansions; n++) {
-        //         for (m = 0; m <= n; m++) {
-        //             for (k = -m; k <= -1; k++) {
-        //                 ek = pow(-1.0, k);
-        //                 nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-        //                 nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
-        //                 Dnmd[nmk] = ek * Dnmd[nmk];
-        //                 Dnmd[nmk1] = pow(-1.0, m + k) * Dnmd[nmk];
-        //             }
-        //             for (k = 0; k <= m; k++) {
-        //                 nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-        //                 nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + k * (2 * n + 1) + m;
-        //                 nmk2 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
-        //                 Dnmd[nmk1] = pow(-1.0, m + k) * Dnmd[nmk];
-        //                 Dnmd[nmk2] = Dnmd[nmk1];
-        //             }
-        //         }
-        //     }
+            for (let n = 0; n < core.numExpansions; n++) {
+                let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + n;
+                Dnmd[nmk] = Math.pow(Math.cos(alpha * 0.5), 2 * n);
+                for (let k = n; k >= 1 - n; k--) {
+                    nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k;
+                    let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k - 1;
+                    let ank = (n + k) / (n - k + 1);
+                    Dnmd[nmk1] = Math.sqrt(ank) * Math.tan(alpha * 0.5) * Dnmd[nmk];
+                }
+                for (let m = n; m >= 1; m--) {
+                    for (let k = m - 1; k >= 1 - m; k--) {
+                        nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k + 1;
+                        let nm1k = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + (m - 1) * (2 * n + 1) + k;
+                        Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
+                    }
+                }
+            }
 
-        //     for (n = 0; n < numExpansions; n++) {
-        //         for (m = 0; m <= n; m++) {
-        //             for (k = -n; k <= n; k++) {
-        //                 nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-        //                 nk = n * (n + 1) + k;
-        //                 Dnm[i + numRelativeBox][m][nk] = Dnmd[nmk] * expBeta[k + m + 2 * numExpansions - 2];
-        //             }
-        //         }
-        //     }
-        // }
+            for (let n = 1; n < core.numExpansions; n++) {
+                for (let m = 0; m <= n; m++) {
+                    for (let k = -m; k <= -1; k++) {
+                        let ek = Math.pow(-1.0, k);
+                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
+                        Dnmd[nmk] = ek * Dnmd[nmk];
+                        Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
+                    }
+                    for (let k = 0; k <= m; k++) {
+                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + k * (2 * n + 1) + m;
+                        let nmk2 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
+                        Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
+                        Dnmd[nmk2] = Dnmd[nmk1];
+                    }
+                }
+            }
+
+            for (let n = 0; n < core.numExpansions; n++) {
+                for (let m = 0; m <= n; m++) {
+                    for (let k = -n; k <= n; k++) {
+                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nk = n * (n + 1) + k;
+                        let c = Complex.fromBuffer(expBeta, k + m + 2 * core.numExpansions - 2);
+                        this.Dnm[i + numRelativeBox][m][nk * 2] = Dnmd[nmk] * c.re;
+                        this.Dnm[i + numRelativeBox][m][nk * 2 + 1] = Dnmd[nmk] * c.im;
+                    }
+                }
+            }
+        }
 
         // for (j = 0; j < numBoxIndexTotal; j++) {
         //     for (i = 0; i < numCoefficients; i++) {
@@ -288,13 +355,44 @@ export class KernelTs implements IKernel {
         }
         return { rho: r, alpha: theta, beta: phi };
     }
+    // Spherical harmonic rotation
+    rotation(Cnm: Float32Array, Dnm: Array<Float32Array>): Float32Array {
+        const CnmOut = new Float32Array(Cnm.length);
 
-    Mnm: Array<Float32Array>;
+        for (let n = 0; n < this.core.numExpansions; n++) {
+            for (let m = 0; m <= n; m++) {
+                let nms = n * (n + 1) / 2 + m;
+                let CnmScalarRe = 0, CnmScalarIm = 0;
+                for (let k = -n; k <= -1; k++) {
+                    let nk = n * (n + 1) + k;
+                    let nks = n * (n + 1) / 2 - k;
+                    let t = Complex.fromBuffer(Dnm[m], nk)
+                        .multiply(Complex.fromBuffer(Cnm, nks).conj())
+                    CnmScalarRe += t.re;
+                    CnmScalarIm += t.im;
+                }
+                for (let k = 0; k <= n; k++) {
+                    let nk = n * (n + 1) + k;
+                    let nks = n * (n + 1) / 2 + k;
+                    let t = Complex.fromBuffer(Dnm[m], nk)
+                        .multiply(Complex.fromBuffer(Cnm, nks))
+                    CnmScalarRe += t.re;
+                    CnmScalarIm += t.im;
+                }
+                CnmOut[nms * 2] = CnmScalarRe;
+                CnmOut[nms * 2 + 1] = CnmScalarIm;
+            }
+        }
+        return CnmOut;
+    }
+
+
+
     async p2m(numBoxIndex: number, particleOffset: any) {
         const core = this.core;
         const particleBuffer = this.particleBuffer;
 
-        this.Mnm = new Array(core.numBoxIndexTotal);// ?
+
 
         let YnmReal = new Float32Array(core.numExpansion2);
 
@@ -341,7 +439,7 @@ export class KernelTs implements IKernel {
                     for (let m = 0; m <= n; m++) {
                         let nm = n * n + n + m;
                         let nms = n * (n + 1) / 2 + m;
-                        let eim = complex_exp(0, -m * beta);
+                        let eim = new Complex(0, -m * beta).exp();
                         const w = particleBuffer[j * 4 + 3];
 
                         MnmVec[nms * 2] += w * YnmReal[nm] * eim.re;
@@ -354,6 +452,64 @@ export class KernelTs implements IKernel {
         }
 
 
+    }
+    async m2m(numBoxIndex: number, numBoxIndexOld: number, numLevel: number) {
+        //   int ii, ib, j, jj, nfjp, nfjc, jb, je, k, jk, jks, n, jnk, jnks, nm;
+        //   vec3<int> boxIndex3D;
+        //   double boxSize, rho;
+        //   std::complex<double> cnm, MnmScalar;
+        //   std::complex<double> MnmVectorB[numCoefficients], MnmVectorA[numCoefficients];
+        const core = this.core;
+        const anm = this.anm;
+        const boxSize = core.rootBoxSize / (1 << numLevel);
+        const MnmVectorA = new Float32Array(core.numCoefficients * 2);
+        for (let ii = 0; ii < numBoxIndex; ii++) {
+            let ib = ii + core.levelOffset[numLevel - 1];
+            this.Mnm[ib] = new Float32Array(core.numCoefficients * 2);
+        }
+        for (let jj = 0; jj < numBoxIndexOld; jj++) {
+            let jb = jj + core.levelOffset[numLevel];
+            let nfjp = Math.floor(core.boxIndexFull[jb] / 8);
+            let nfjc = core.boxIndexFull[jb] % 8;
+            let ib = core.boxIndexMask[nfjp] + core.levelOffset[numLevel - 1];
+            let boxIndex3D = core.unmorton(nfjc);
+            boxIndex3D.x = 4 - boxIndex3D.x * 2;
+            boxIndex3D.y = 4 - boxIndex3D.y * 2;
+            boxIndex3D.z = 4 - boxIndex3D.z * 2;
+            let je = core.morton1(boxIndex3D, 3);
+            let rho = boxSize * Math.sqrt(3.0) / 4;
+            for (let j = 0; j < core.numCoefficients * 2; j++) {
+                MnmVectorA[j] = this.Mnm[jb][j];
+            }
+            let MnmVectorB = this.rotation(MnmVectorA, this.Dnm[je]);
+            for (let j = 0; j < core.numExpansions; j++) {
+                for (let k = 0; k <= j; k++) {
+                    let jk = j * j + j + k;
+                    let jks = j * (j + 1) / 2 + k;
+                    let MnmScalarRe = 0, MnmScalarIm = 0;
+                    for (let n = 0; n <= j - k; n++) {
+                        let jnk = (j - n) * (j - n) + j - n + k;
+                        let jnks = (j - n) * (j - n + 1) / 2 + k;
+                        let nm = n * n + n;
+                        let temp = Math.pow(-1.0, n) * anm[nm] * anm[jnk] / anm[jk] * Math.pow(rho, n);
+                        let cnm = Complex.fromBuffer(this.Ynm, nm).multiply(new Complex(temp, 0));
+                        let temp2 = Complex.fromBuffer(MnmVectorB, jnks).multiply(cnm);
+
+                        MnmScalarRe += temp2.re;
+                        MnmScalarIm += temp2.im;
+                    }
+                    MnmVectorA[jks * 2] = MnmScalarRe;
+                    MnmVectorA[jks * 2 + 1] = MnmScalarIm;
+                }
+            }
+
+            MnmVectorB = this.rotation(MnmVectorA, this.Dnm[je + numRelativeBox]);
+            console.log(MnmVectorB)
+            for (let j = 0; j < core.numCoefficients; j++) {
+                this.Mnm[ib][j * 2] += MnmVectorB[j * 2];
+                this.Mnm[ib][j * 2 + 1] += MnmVectorB[j * 2 + 1];
+            }
+        }
     }
 
 }

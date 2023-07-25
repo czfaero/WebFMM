@@ -42,11 +42,25 @@ export class Tester {
 
         await VerifyFloatBuffer("data-p2p.bin", instance.kernel.accelBuffer);
 
+        console.log("p2m numBoxIndex: " + numBoxIndex);
         let time_p2m = performance.now();
         await instance.kernel.p2m(numBoxIndex, instance.particleOffset);
         time_p2m = performance.now() - time_p2m;
         console.log(`time p2m: ${time_p2m.toFixed(2)} ms`);
         await VerifyFloatBuffer2("data-p2m.bin", instance.kernel.Mnm, numBoxIndex);
+
+        if (instance.maxLevel > 2) {
+            for (numLevel = instance.maxLevel - 1; numLevel >= 2; numLevel--) {
+                let numBoxIndexOld = numBoxIndex;
+                numBoxIndex = instance.getBoxDataOfParent(numBoxIndex, numLevel);
+                instance.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
+            }
+            numLevel = 2;
+        }
+        else {
+            instance.getBoxIndexMask(numBoxIndex, numLevel);
+        }
+        await VerifyFloatBuffer2("data-m2m.bin", instance.kernel.Mnm, instance.numBoxIndexTotal);
 
     }
 }
@@ -141,7 +155,7 @@ async function VerifyFloatBuffer2(name: string, data: Array<Float32Array>, count
     let max_error = 0;
     let error_sum = 0;
     for (let c = 0; c < count; c++)
-        for (let i = 0; i < data.length; i++) {
+        for (let i = 0; i < data[0].length; i++) {
             const r = CompareNumber(expect[c * data[0].length + i], data[c][i]);
             if (!r) {
                 error_count++;

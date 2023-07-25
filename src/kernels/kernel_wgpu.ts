@@ -253,6 +253,10 @@ export class KernelWgpu implements IKernel {
 
   }
 
+  async m2m(numBoxIndex: number, numBoxIndexOld: number, numLevel: number) {
+    
+  }
+
   async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>, workgroupCount = 1, readBuffer = true) {
     const shaderModule = this.shaders[entryPoint];
     const computePipeline = this.device.createComputePipeline({

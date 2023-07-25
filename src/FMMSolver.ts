@@ -200,9 +200,10 @@ export class FMMSolver {
         for (let numLevel = this.maxLevel - 1; numLevel >= 2; numLevel--) {
             currentIndex = -1;
             for (let i = 0; i < this.particleCount; i++) {
-                if (sortValue[i] / (1 << 3 * (this.maxLevel - numLevel)) != currentIndex) {
+                const temp = Math.floor(sortValue[i] / (1 << 3 * (this.maxLevel - numLevel)));
+                if (temp != currentIndex) {
                     this.numBoxIndexTotal++;
-                    currentIndex = sortValue[i] / (1 << 3 * (this.maxLevel - numLevel));
+                    currentIndex = temp;
                 }
             }
         }
@@ -257,6 +258,35 @@ export class FMMSolver {
         }
         this.particleOffset[1][numBoxIndex - 1] = this.particleCount - 1;
         return numBoxIndex;
+    }
+    // Propagate non-empty/full link list to parent boxes
+    getBoxDataOfParent(_numBoxIndex: number, numLevel: number) {
+        this.levelOffset[numLevel - 1] = this.levelOffset[numLevel] + _numBoxIndex;
+        let numBoxIndexOld = _numBoxIndex;
+        let numBoxIndex = 0;
+        let currentIndex = -1;
+        for (let i = 0; i < this.numBoxIndexFull; i++)
+            this.boxIndexMask[i] = -1;
+        for (let i = 0; i < numBoxIndexOld; i++) {
+            let boxIndex = i + this.levelOffset[numLevel];
+            if (currentIndex != Math.floor(this.boxIndexFull[boxIndex] / 8)) {
+                currentIndex = Math.floor(this.boxIndexFull[boxIndex] / 8);
+                this.boxIndexMask[currentIndex] = numBoxIndex;
+                this.boxIndexFull[numBoxIndex + this.levelOffset[numLevel - 1]] = currentIndex;
+                numBoxIndex++;
+            }
+        }
+        return numBoxIndex;
+    }
+
+    // Recalculate non-empty box index for current level
+    getBoxIndexMask(numBoxIndex: number, numLevel: number) {
+        for (let i = 0; i < this.numBoxIndexFull; i++)
+            this.boxIndexMask[i] = -1;
+        for (let i = 0; i < numBoxIndex; i++) {
+            let boxIndex = i + this.levelOffset[numLevel - 1];
+            this.boxIndexMask[this.boxIndexFull[boxIndex]] = i;
+        }
     }
 
     getInteractionListP2P(numBoxIndex: number, numLevel: number) {
@@ -323,8 +353,19 @@ export class FMMSolver {
         //     kernel.p2p(numBoxIndex);
         await this.kernel.p2p(numBoxIndex, this.interactionList, this.numInteraction, this.particleOffset);
 
-
         await this.kernel.p2m(numBoxIndex, this.particleOffset);
+
+        if (this.maxLevel > 2) {
+            for (numLevel = this.maxLevel - 1; numLevel >= 2; numLevel--) {
+                let numBoxIndexOld = numBoxIndex;
+                numBoxIndex = this.getBoxDataOfParent(numBoxIndex, numLevel);
+                this.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
+            }
+            numLevel = 2;
+        }
+        else {
+            this.getBoxIndexMask(numBoxIndex, numLevel);
+        }
     }
     numExpansions: number;
     numExpansion2: number;
