@@ -194,6 +194,7 @@ export class KernelWgpu implements IKernel {
   }
 
   Mnm: Array<Float32Array>;
+  Lnm: Array<Float32Array>;
   async p2m(numBoxIndex: number, particleOffset: any) {
 
     let fact = 1.0;
@@ -254,8 +255,11 @@ export class KernelWgpu implements IKernel {
   }
 
   async m2m(numBoxIndex: number, numBoxIndexOld: number, numLevel: number) {
-    
+
   }
+  async m2l(numBoxIndex: number, numLevel: number) { }
+  async l2l(numBoxIndex: number, numLevel: number) { }
+  async l2p(numBoxIndex: number) { }
 
   async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>, workgroupCount = 1, readBuffer = true) {
     const shaderModule = this.shaders[entryPoint];

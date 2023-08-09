@@ -334,6 +334,103 @@ export class FMMSolver {
             }
         }
     }
+    getInteractionListM2L(numBoxIndex: number, numLevel: number) {
+        // Initialize the minimum and maximum values
+        let jxmin = 1000000,
+            jxmax = -1000000,
+            jymin = 1000000,
+            jymax = -1000000,
+            jzmin = 1000000,
+            jzmax = -1000000;
+        // Calculate the minimum and maximum of boxIndex3D
+        for (let jj = 0; jj < numBoxIndex; jj++) {
+            let jb = jj + this.levelOffset[numLevel - 1];
+            let boxIndex3D = this.unmorton(this.boxIndexFull[jb]);
+            jxmin = Math.min(jxmin, boxIndex3D.x);
+            jxmax = Math.max(jxmax, boxIndex3D.x);
+            jymin = Math.min(jymin, boxIndex3D.y);
+            jymax = Math.max(jymax, boxIndex3D.y);
+            jzmin = Math.min(jzmin, boxIndex3D.z);
+            jzmax = Math.max(jzmax, boxIndex3D.z);
+        }
+
+        for (let ii = 0; ii < numBoxIndex; ii++) {
+            let ib = ii + this.levelOffset[numLevel - 1];
+            this.numInteraction[ii] = 0;
+            let boxIndex3D = this.unmorton(this.boxIndexFull[ib]);
+            let ix = boxIndex3D.x,
+                iy = boxIndex3D.y,
+                iz = boxIndex3D.z;
+            for (let jj = 0; jj < numBoxIndex; jj++) {
+                let jb = jj + this.levelOffset[numLevel - 1];
+                boxIndex3D = this.unmorton(this.boxIndexFull[jb]);
+                let jx = boxIndex3D.x,
+                    jy = boxIndex3D.y,
+                    jz = boxIndex3D.z;
+                if (jx < ix - 1 || ix + 1 < jx || jy < iy - 1 || iy + 1 < jy || jz < iz - 1 || iz + 1 < jz) {
+                    this.interactionList[ii][this.numInteraction[ii]] = jj;
+                    this.numInteraction[ii]++;
+                }
+            }
+        }
+
+    }
+    getInteractionListM2LLower(numBoxIndex: number, numLevel: number) {
+        // Initialize the minimum and maximum values
+        let jxmin = 1000000,
+            jxmax = -1000000,
+            jymin = 1000000,
+            jymax = -1000000,
+            jzmin = 1000000,
+            jzmax = -1000000;
+        // Calculate the minimum and maximum of boxIndex3D
+        for (let jj = 0; jj < numBoxIndex; jj++) {
+            let jb = jj + this.levelOffset[numLevel - 1];
+            let boxIndex3D = this.unmorton(this.boxIndexFull[jb]);
+            jxmin = Math.min(jxmin, boxIndex3D.x);
+            jxmax = Math.max(jxmax, boxIndex3D.x);
+            jymin = Math.min(jymin, boxIndex3D.y);
+            jymax = Math.max(jymax, boxIndex3D.y);
+            jzmin = Math.min(jzmin, boxIndex3D.z);
+            jzmax = Math.max(jzmax, boxIndex3D.z);
+        }
+        for (let ii = 0; ii < numBoxIndex; ii++) {
+            let ib = ii + this.levelOffset[numLevel - 1];
+            this.numInteraction[ii] = 0;
+            let boxIndex3D = this.unmorton(this.boxIndexFull[ib]);
+            let ix = boxIndex3D.x,
+                iy = boxIndex3D.y,
+                iz = boxIndex3D.z;
+            let ixp = (ix + 2) / 2,
+                iyp = (iy + 2) / 2,
+                izp = (iz + 2) / 2;
+            for (let jxp = ixp - 1; jxp <= ixp + 1; jxp++) {
+                for (let jyp = iyp - 1; jyp <= iyp + 1; jyp++) {
+                    for (let jzp = izp - 1; jzp <= izp + 1; jzp++) {
+                        for (let jx = Math.max(2 * jxp - 2, jxmin); jx <= Math.min(2 * jxp - 1, jxmax); jx++) {
+                            for (let jy = Math.max(2 * jyp - 2, jymin); jy <= Math.min(2 * jyp - 1, jymax); jy++) {
+                                for (let jz = Math.max(2 * jzp - 2, jzmin); jz <= Math.min(2 * jzp - 1, jzmax); jz++) {
+                                    if (jx < ix - 1 || ix + 1 < jx || jy < iy - 1 || iy + 1 < jy || jz < iz - 1 || iz + 1 < jz) {
+                                        boxIndex3D.x = jx;
+                                        boxIndex3D.y = jy;
+                                        boxIndex3D.z = jz;
+                                        let boxIndex = this.morton1(boxIndex3D, numLevel);
+                                        let jj = this.boxIndexMask[boxIndex];
+                                        if (jj != -1) {
+                                            this.interactionList[ii][this.numInteraction[ii]] = jj;
+                                            this.numInteraction[ii]++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+    }
     kernel: IKernel;
     async main() {
         this.setBoxSize();
@@ -366,6 +463,28 @@ export class FMMSolver {
         else {
             this.getBoxIndexMask(numBoxIndex, numLevel);
         }
+        this.getInteractionListM2L(numBoxIndex, numLevel);
+        this.kernel.m2l(numBoxIndex, numLevel);
+
+        if (this.maxLevel > 2) {
+
+            for (numLevel = 3; numLevel <= this.maxLevel; numLevel++) {
+
+                numBoxIndex = this.levelOffset[numLevel - 2] - this.levelOffset[numLevel - 1];
+
+                this.kernel.l2l(numBoxIndex, numLevel);
+
+                this.getBoxIndexMask(numBoxIndex, numLevel);
+
+                this.getInteractionListM2LLower(numBoxIndex, numLevel);
+
+                this.kernel.m2l(numBoxIndex, numLevel);
+            }
+            numLevel = this.maxLevel;
+        }
+
+        this.kernel.l2p(numBoxIndex);
+
     }
     numExpansions: number;
     numExpansion2: number;

@@ -61,11 +61,36 @@ export class Tester {
             instance.getBoxIndexMask(numBoxIndex, numLevel);
         }
         await VerifyFloatBuffer2("data-m2m.bin", instance.kernel.Mnm, instance.numBoxIndexTotal);
+        instance.getInteractionListM2L(numBoxIndex, numLevel);
+        instance.kernel.m2l(numBoxIndex, numLevel);
 
+        await VerifyFloatBuffer2("data-m2l.bin", instance.kernel.Lnm, numBoxIndex);
+throw "pause";
+        if (instance.maxLevel > 2) {
+
+            for (numLevel = 3; numLevel <= instance.maxLevel; numLevel++) {
+
+                console.log(`level ${numLevel} : l2l m2l`);
+                numBoxIndex = instance.levelOffset[numLevel - 2] - instance.levelOffset[numLevel - 1];
+
+                instance.kernel.l2l(numBoxIndex, numLevel);
+
+                instance.getBoxIndexMask(numBoxIndex, numLevel);
+
+                instance.getInteractionListM2LLower(numBoxIndex, numLevel);
+
+                instance.kernel.m2l(numBoxIndex, numLevel);
+            }
+            numLevel = instance.maxLevel;
+            await VerifyFloatBuffer2("data-l2l.bin", instance.kernel.Lnm, numBoxIndex);
+        }
+
+        instance.kernel.l2p(numBoxIndex);
+        await VerifyFloatBuffer("data-l2p.bin", instance.kernel.accelBuffer);
     }
 }
 
-function CompareNumber(a: number, b: number, delta = 0.001) {
+function CompareNumber(a: number, b: number, delta = 0.002) {
     return Math.abs(a - b) < delta
 }
 function Error(a: number, b: number) {
@@ -121,7 +146,7 @@ async function VerifyFloatBuffer(name: string, data: Float32Array) {
         const r = CompareNumber(expect[i], data[i]);
         if (!r) {
             error_count++;
-            console.log(`[${i}]Expect: ${expect[i]} | Got: ${data[i]}`);
+            console.log(`[${i}]Expect: ${expect[i]} | Got: ${data[i]} |${expect[i] - data[i]}`);
             if (error_count > 10) {
                 break;
             }

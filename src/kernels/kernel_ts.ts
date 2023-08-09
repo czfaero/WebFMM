@@ -15,6 +15,12 @@ class Complex {
             cn1.re * cn2.re - cn1.im * cn2.im,
             cn1.re * cn2.im + cn1.im * cn2.re);
     }
+    multiplyReal(x: number): Complex {
+        const cn1 = this;
+        return new Complex(
+            cn1.re * x,
+            cn1.im * x);
+    }
     conj() {
         return new Complex(this.re, -this.im);
     }
@@ -29,7 +35,7 @@ class Complex {
     static fromBuffer(b: Float32Array, i: number): Complex {
         return new Complex(b[i * 2], b[i * 2 + 1]);
     };
-    constructor(re: number, im: number) {
+    constructor(re: number, im = 0) {
         this.re = re;
         this.im = im;
     }
@@ -79,6 +85,9 @@ export class KernelTs implements IKernel {
         this.anm = new Float32Array(4 * core.numExpansion2);
         this.factorial = new Float32Array(4 * core.numExpansion2);
         this.Lnm = new Array(core.numBoxIndexLeaf);
+        for (let i = 0; i < core.numBoxIndexLeaf; i++) {
+            this.Lnm[i] = new Float32Array(core.numCoefficients * 2);
+        }
         this.LnmOld = new Array(core.numBoxIndexLeaf);
         this.Mnm = new Array(core.numBoxIndexTotal);
         this.Ynm = new Float32Array(4 * core.numExpansion2 * 2);
@@ -165,7 +174,7 @@ export class KernelTs implements IKernel {
             for (let m = 1; m <= n; m++) {
                 let anmd = n * (n + 1) - m * (m - 1);
                 for (let k = 1 - m; k < m; k++) {
-                    let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                    let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
                     let anmkd = ((n * (n + 1) - k * (k + 1))) / (n * (n + 1) - m * (m - 1));// double
                     anmk[0][nmk] = -(m + k) / Math.sqrt(anmd);
                     anmk[1][nmk] = Math.sqrt(anmkd);
@@ -189,19 +198,19 @@ export class KernelTs implements IKernel {
             }
 
             for (let n = 0; n < core.numExpansions; n++) {
-                let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + n;
+                let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + n;
                 Dnmd[nmk] = Math.pow(Math.cos(alpha * 0.5), 2 * n);
                 for (let k = n; k >= 1 - n; k--) {
-                    nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k;
-                    let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k - 1;
-                    let ank = (n + k) / (n - k + 1);
+                    nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k;
+                    let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k - 1;
+                    let ank = (n + k) / (n - k + 1);//double
                     Dnmd[nmk1] = Math.sqrt(ank) * Math.tan(alpha * 0.5) * Dnmd[nmk];
                 }
                 for (let m = n; m >= 1; m--) {
                     for (let k = m - 1; k >= 1 - m; k--) {
-                        nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k + 1;
-                        let nm1k = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + (m - 1) * (2 * n + 1) + k;
+                        nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + 1;
+                        let nm1k = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + (m - 1) * (2 * n + 1) + k;
                         Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
                     }
                 }
@@ -212,15 +221,15 @@ export class KernelTs implements IKernel {
                 for (let m = 0; m <= n; m++) {
                     for (let k = -m; k <= -1; k++) {
                         let ek = Math.pow(-1.0, k);
-                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
+                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
                         Dnmd[nmk] = ek * Dnmd[nmk];
                         Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
                     }
                     for (let k = 0; k <= m; k++) {
-                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + k * (2 * n + 1) + m;
-                        let nmk2 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
+                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + k * (2 * n + 1) + m;
+                        let nmk2 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
                         Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
                         Dnmd[nmk2] = Dnmd[nmk1];
                     }
@@ -230,7 +239,7 @@ export class KernelTs implements IKernel {
             for (let n = 0; n < core.numExpansions; n++) {
                 for (let m = 0; m <= n; m++) {
                     for (let k = -n; k <= n; k++) {
-                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
                         let nk = n * (n + 1) + k;
                         let c = Complex.fromBuffer(expBeta, k + m + 2 * core.numExpansions - 2);
                         this.Dnm[i][m][nk * 2] = Dnmd[nmk] * c.re;
@@ -251,19 +260,19 @@ export class KernelTs implements IKernel {
             }
 
             for (let n = 0; n < core.numExpansions; n++) {
-                let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + n;
+                let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + n;
                 Dnmd[nmk] = Math.pow(Math.cos(alpha * 0.5), 2 * n);
                 for (let k = n; k >= 1 - n; k--) {
-                    nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k;
-                    let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + n * (2 * n + 1) + k - 1;
+                    nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k;
+                    let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k - 1;
                     let ank = (n + k) / (n - k + 1);
                     Dnmd[nmk1] = Math.sqrt(ank) * Math.tan(alpha * 0.5) * Dnmd[nmk];
                 }
                 for (let m = n; m >= 1; m--) {
                     for (let k = m - 1; k >= 1 - m; k--) {
-                        nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k + 1;
-                        let nm1k = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + (m - 1) * (2 * n + 1) + k;
+                        nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + 1;
+                        let nm1k = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + (m - 1) * (2 * n + 1) + k;
                         Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
                     }
                 }
@@ -273,15 +282,15 @@ export class KernelTs implements IKernel {
                 for (let m = 0; m <= n; m++) {
                     for (let k = -m; k <= -1; k++) {
                         let ek = Math.pow(-1.0, k);
-                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
+                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
                         Dnmd[nmk] = ek * Dnmd[nmk];
                         Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
                     }
                     for (let k = 0; k <= m; k++) {
-                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
-                        let nmk1 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + k * (2 * n + 1) + m;
-                        let nmk2 = (4 * n * n * n + 6 * n * n + 5 * n) / 3 - k * (2 * n + 1) - m;
+                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + k * (2 * n + 1) + m;
+                        let nmk2 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n)) / 3 - k * (2 * n + 1) - m;
                         Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
                         Dnmd[nmk2] = Dnmd[nmk1];
                     }
@@ -291,7 +300,7 @@ export class KernelTs implements IKernel {
             for (let n = 0; n < core.numExpansions; n++) {
                 for (let m = 0; m <= n; m++) {
                     for (let k = -n; k <= n; k++) {
-                        let nmk = (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
                         let nk = n * (n + 1) + k;
                         let c = Complex.fromBuffer(expBeta, k + m + 2 * core.numExpansions - 2);
                         this.Dnm[i + numRelativeBox][m][nk * 2] = Dnmd[nmk] * c.re;
@@ -454,11 +463,6 @@ export class KernelTs implements IKernel {
 
     }
     async m2m(numBoxIndex: number, numBoxIndexOld: number, numLevel: number) {
-        //   int ii, ib, j, jj, nfjp, nfjc, jb, je, k, jk, jks, n, jnk, jnks, nm;
-        //   vec3<int> boxIndex3D;
-        //   double boxSize, rho;
-        //   std::complex<double> cnm, MnmScalar;
-        //   std::complex<double> MnmVectorB[numCoefficients], MnmVectorA[numCoefficients];
         const core = this.core;
         const anm = this.anm;
         const boxSize = core.rootBoxSize / (1 << numLevel);
@@ -504,10 +508,284 @@ export class KernelTs implements IKernel {
             }
 
             MnmVectorB = this.rotation(MnmVectorA, this.Dnm[je + numRelativeBox]);
-            console.log(MnmVectorB)
             for (let j = 0; j < core.numCoefficients; j++) {
                 this.Mnm[ib][j * 2] += MnmVectorB[j * 2];
                 this.Mnm[ib][j * 2 + 1] += MnmVectorB[j * 2 + 1];
+            }
+        }
+    }
+    async m2l(numBoxIndex: number, numLevel: number) {
+        // int i, j, ii, ib, ix, iy, iz, ij, jj, jb, jx, jy, jz, je, k, jk, jks, n, nk, nks, jkn, jnk;
+        // vec3<int> boxIndex3D;
+        // vec3<double> dist;
+        // double boxSize, rho, rhoj, rhojk, rhojn;
+        // std::complex<double> LnmVectorA[numCoefficients], MnmVectorA[numCoefficients];
+        // std::complex<double> LnmVectorB[numCoefficients], MnmVectorB[numCoefficients];
+        // std::complex<double> cnm, LnmScalar;
+        const core = this.core;
+
+
+        let rawData = await (await fetch("data-Dnm.bin")).arrayBuffer();
+        const expectDnm = new Float32Array(rawData);
+        console.log(expectDnm);
+        let debugPos = 0;
+        for (let i = 0; i < 2 * numRelativeBox; i++) {
+
+            for (let j = 0; j < core.numExpansions; j++)
+                for (let k = 0; k < core.numExpansion2 * 2; k++) {
+                    let error = this.Dnm[i][j][k] - expectDnm[debugPos];
+                    if (Math.abs(error) > 0.001) {
+                        console.log(`[${i},${j},${k}] Expect: ${expectDnm[debugPos]} | Got: ${this.Dnm[i][j][k]} | ${error}`);
+         
+                    }
+                    debugPos++;
+                }
+        }
+
+
+
+
+
+        rawData = await (await fetch("data-m2l-vectors.bin")).arrayBuffer();
+        const expect = new Float32Array(rawData);
+        console.log(expect)
+        let pos = 0;
+
+
+
+        let boxSize = core.rootBoxSize / (1 << numLevel);
+        const LnmVectorA = new Float32Array(core.numCoefficients * 2);
+        // if (numLevel == 2) {
+
+        // }
+        for (let ii = 0; ii < numBoxIndex; ii++) {
+            let ib = ii + core.levelOffset[numLevel - 1];
+            let boxIndex3D = core.unmorton(core.boxIndexFull[ib]);
+            let ix = boxIndex3D.x,
+                iy = boxIndex3D.y,
+                iz = boxIndex3D.z;
+            for (let ij = 0; ij < core.numInteraction[ii]; ij++) {
+                let jj = core.interactionList[ii][ij];
+                let jb = jj + core.levelOffset[numLevel - 1];
+
+                const MnmVectorB = this.Mnm[jb];
+                let boxIndex3D = core.unmorton(core.boxIndexFull[jb]);
+                let jx = boxIndex3D.x,
+                    jy = boxIndex3D.y,
+                    jz = boxIndex3D.z;
+                let dx = (ix - jx) * boxSize,
+                    dy = (iy - jy) * boxSize,
+                    dz = (iz - jz) * boxSize;
+                boxIndex3D.x = (ix - jx) + 3;
+                boxIndex3D.y = (iy - jy) + 3;
+                boxIndex3D.z = (iz - jz) + 3;
+                let je = core.morton1(boxIndex3D, 3);
+                let rho = Math.sqrt(dx * dx + dy * dy + dz * dz) + eps;
+                const MnmVectorA = this.rotation(MnmVectorB, this.Dnm[je]);
+                let rhoj = 1;
+                for (let j = 0; j < core.numExpansions; j++) {
+                    let rhojk = rhoj;
+                    rhoj *= rho;
+                    for (let k = 0; k <= j; k++) {
+                        let jk = j * j + j + k;
+                        let jks = j * (j + 1) / 2 + k;
+                        let LnmScalarRe = 0, LnmScalarIm = 0;
+                        let rhojn = rhojk;
+                        rhojk *= rho;
+                        for (let n = Math.abs(k); n < core.numExpansions; n++) {
+                            rhojn *= rho;
+                            let nk = n * n + n + k;
+                            let nks = n * (n + 1) / 2 + k;
+                            let jkn = jk * core.numExpansion2 + nk;
+                            let jnk = (j + n) * (j + n) + j + n;
+                            let cnm = new Complex(this.Anm[jkn] / rhojn, 0).multiply(Complex.fromBuffer(this.Ynm, jnk));
+                            let temp = Complex.fromBuffer(MnmVectorA, nks).multiply(cnm);
+                            LnmScalarRe += temp.re;
+                            LnmScalarIm += temp.im;
+                        }
+                        LnmVectorA[jks * 2] = LnmScalarRe;
+                        LnmVectorA[jks * 2 + 1] = LnmScalarIm;
+                    }
+                }
+                let LnmVectorB = this.rotation(LnmVectorA, this.Dnm[je + numRelativeBox]);
+                //console.log(LnmVectorB);
+                for (let n of LnmVectorB) {
+                    let error = expect[pos] - n;
+                    if (Math.abs(error) > 0.001) {
+                      //  console.log(`[${Math.floor(pos / 110)},${pos % 110}] Expect: ${expect[pos]} | Got: ${n} | ${error}`);
+                    }
+                    pos++;
+                }
+
+                for (let j = 0; j < core.numCoefficients; j++) {
+                    this.Lnm[ii][j * 2] += LnmVectorB[j * 2];
+                    this.Lnm[ii][j * 2 + 1] += LnmVectorB[j * 2 + 1];
+                }
+            }
+        }
+        for (let jj = 0; jj < numBoxIndex; jj++) {
+            let jb = jj + core.levelOffset[numLevel - 1];
+            this.Mnm[jb].fill(0);
+        }
+
+    }
+    async l2l(numBoxIndex: number, numLevel: number) {
+
+        //           int numBoxIndexOld, ii, ib, i, nfip, nfic, je, j, k, jk, jks, n, jnk, nk, nks;
+        //   vec3<int> boxIndex3D;
+        //   double boxSize, rho;
+        //   std::complex<double> cnm, LnmScalar;
+        //   std::complex<double> LnmVectorA[numCoefficients], LnmVectorB[numCoefficients];
+        const core = this.core;
+        const boxSize = core.rootBoxSize / (1 << numLevel);
+
+        let LnmVectorA = new Float32Array(core.numCoefficients * 2);
+        let numBoxIndexOld = numBoxIndex;
+        if (numBoxIndexOld < 8) { numBoxIndexOld = 8; }
+        for (let ii = 0; ii < numBoxIndexOld; ii++) {
+            this.LnmOld[ii] = this.Lnm[ii];
+        }
+
+        //int nbc, neo[numBoxIndexFull];
+        let nbc = -1;
+        let neo = new Int32Array(core.numBoxIndexFull);
+        numBoxIndexOld = 0;
+        for (let i = 0; i < core.numBoxIndexFull; i++)
+            neo[i] = -1;
+        for (let ii = 0; ii < numBoxIndex; ii++) {
+            let ib = ii + core.levelOffset[numLevel - 1];
+            if (nbc != Math.floor(core.boxIndexFull[ib] / 8)) {
+                nbc = Math.floor(core.boxIndexFull[ib] / 8);
+                neo[nbc] = numBoxIndexOld;
+                numBoxIndexOld++;
+            }
+        }
+
+        for (let ii = 0; ii < numBoxIndex; ii++) {
+            let ib = ii + core.levelOffset[numLevel - 1];
+            let nfip = Math.floor(core.boxIndexFull[ib] / 8);
+            let nfic = core.boxIndexFull[ib] % 8;
+            let boxIndex3D = core.unmorton(nfic);
+            boxIndex3D.x = boxIndex3D.x * 2 + 2;
+            boxIndex3D.y = boxIndex3D.y * 2 + 2;
+            boxIndex3D.z = boxIndex3D.z * 2 + 2;
+            let je = core.morton1(boxIndex3D, 3);
+            let rho = boxSize * Math.sqrt(3.0) / 2;
+            ib = neo[nfip];
+            for (let i = 0; i < core.numCoefficients; i++) {
+                LnmVectorA[i * 2] = this.LnmOld[ib][i * 2];
+                LnmVectorA[i * 2 + 1] = this.LnmOld[ib][i * 2 + 1];
+            }
+            let LnmVectorB = this.rotation(LnmVectorA, this.Dnm[je]);
+            for (let j = 0; j < core.numExpansions; j++) {
+                for (let k = 0; k <= j; k++) {
+                    let jk = j * j + j + k;
+                    let jks = j * (j + 1) / 2 + k;
+                    let LnmScalarRe = 0, LnmScalarIm = 0;
+                    for (let n = j; n < core.numExpansions; n++) {
+                        let jnk = (n - j) * (n - j) + n - j;
+                        let nk = n * n + n + k;
+                        let nks = n * (n + 1) / 2 + k;
+                        let cnm = Complex.fromBuffer(this.Ynm, jnk).multiply(new Complex(this.anm[jnk] * this.anm[jk] / this.anm[nk] * Math.pow(rho, n - j)));
+                        let temp = cnm.multiply(Complex.fromBuffer(LnmVectorB, nks))
+                        LnmScalarRe += temp.re;
+                        LnmScalarIm += temp.im;
+                    }
+                    LnmVectorA[jks * 2] = LnmScalarRe;
+                    LnmVectorA[jks * 2 + 1] = LnmScalarIm;
+                }
+            }
+            LnmVectorB = this.rotation(LnmVectorA, this.Dnm[je + numRelativeBox]);
+            this.Lnm[ii] = LnmVectorB;
+        }
+
+    }
+    async l2p(numBoxIndex: number) {
+
+
+        //         int ii, i, n, nm, nms, m;
+        //   vec3<int> boxIndex3D;
+        //   vec3<float> boxCenter;
+        //   vec3<double> accel, dist;
+        //   double boxSize, r, theta, phi, accelR, accelTheta, accelPhi;
+        //   double xx, yy, s2, fact, pn, p, p1, p2, rn;
+        //   double YnmReal[numExpansion2], YnmRealTheta[numExpansion2];
+        //   std::complex<double> LnmVector[numCoefficients];
+        //   std::complex<double> rr, rtheta, rphi, I(0.0, 1.0), eim;
+        const core = this.core;
+
+        let YnmReal = new Float32Array(core.numExpansion2);
+        let YnmRealTheta = new Float32Array(core.numExpansion2);
+        const boxSize = core.rootBoxSize / (1 << core.maxLevel);
+        for (let ii = 0; ii < numBoxIndex; ii++) {
+            let boxIndex3D = core.unmorton(core.boxIndexFull[ii]);
+            let boxCenterX = core.boxMinX + (boxIndex3D.x + 0.5) * boxSize,
+                boxCenterY = core.boxMinY + (boxIndex3D.y + 0.5) * boxSize,
+                boxCenterZ = core.boxMinZ + (boxIndex3D.z + 0.5) * boxSize;
+
+            let LnmVector = this.Lnm[ii];
+            for (let i = core.particleOffset[0][ii]; i <= core.particleOffset[1][ii]; i++) {
+                let dx = core.particleBuffer[i * 4] - boxCenterX,
+                    dy = core.particleBuffer[i * 4 + 1] - boxCenterY,
+                    dz = core.particleBuffer[i * 4 + 2] - boxCenterZ;
+                const { rho, alpha, beta } = this.cart2sph(dx, dy, dz);
+                let r = rho, theta = alpha, phi = beta;
+                let xx = Math.cos(theta),
+                    yy = Math.sin(theta),
+                    s2 = Math.sqrt((1 - xx) * (1 + xx)),
+                    fact = 1,
+                    pn = 1;
+                for (let m = 0; m < core.numExpansions; m++) {
+                    let p = pn;
+                    let nm = m * m + 2 * m;
+                    YnmReal[nm] = this.factorial[nm] * p;
+                    let p1 = p;
+                    p = xx * (2 * m + 1) * p;
+                    YnmRealTheta[nm] = this.factorial[nm] * (p - (m + 1) * xx * p1) / yy;
+                    for (let n = m + 1; n < core.numExpansions; n++) {
+                        nm = n * n + n + m;
+                        YnmReal[nm] = this.factorial[nm] * p;
+                        let p2 = p1;
+                        p1 = p;
+                        p = (xx * (2 * n + 1) * p1 - (n + m) * p2) / (n - m + 1);
+                        YnmRealTheta[nm] = this.factorial[nm] * ((n - m + 1) * p - (n + 1) * xx * p1) / yy;
+                    }
+                    pn = -pn * fact * s2;
+                    fact += 2;
+                }
+                let accelR = 0,
+                    accelTheta = 0,
+                    accelPhi = 0,
+                    rn = 1;
+                for (let n = 0; n < core.numExpansions; n++) {
+                    let nm = n * n + n;
+                    let nms = n * (n + 1) / 2;
+                    let rr = new Complex(n * rn / r * YnmReal[nm], 0);
+                    let rtheta = new Complex(rn * YnmRealTheta[nm], 0);
+                    accelR += rr.multiply(Complex.fromBuffer(LnmVector, nms)).re;
+                    accelTheta += rtheta.multiply(Complex.fromBuffer(LnmVector, nms)).re;
+                    for (let m = 1; m <= n; m++) {
+                        nm = n * n + n + m;
+                        nms = n * (n + 1) / 2 + m;
+                        let eim = new Complex(0, m * phi).exp();
+                        rr = eim.multiplyReal(n * rn / r * YnmReal[nm]);
+                        rtheta = eim.multiplyReal(rn * YnmRealTheta[nm]);
+                        let rphi = eim.multiplyReal(m * rn * YnmReal[nm]).multiply(new Complex(0, 1));
+                        let LnmVectorNms = Complex.fromBuffer(LnmVector, nms);
+                        accelR += 2 * rr.multiply(LnmVectorNms).re;
+                        accelTheta += 2 * rtheta.multiply(LnmVectorNms).re;
+                        accelPhi += 2 * rphi.multiply(LnmVectorNms).re;
+                    }
+                    rn *= r;
+                }
+                const sin = Math.sin, cos = Math.cos;
+                let accelX = sin(theta) * cos(phi) * accelR + cos(theta) * cos(phi) / r * accelTheta - sin(phi) / r / sin(theta) * accelPhi,
+                    accelY = sin(theta) * sin(phi) * accelR + cos(theta) * sin(phi) / r * accelTheta + cos(phi) / r / sin(theta) * accelPhi,
+                    accelZ = cos(theta) * accelR - sin(theta) / r * accelTheta;
+
+                this.accelBuffer[i * 3] += inv4PI * accelX;
+                this.accelBuffer[i * 3 + 1] += inv4PI * accelY;
+                this.accelBuffer[i * 3 + 2] += inv4PI * accelZ;
             }
         }
     }

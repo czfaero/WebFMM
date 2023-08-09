@@ -8,5 +8,9 @@ export interface IKernel {
     p2p: (numBoxIndex: number, interactionList: any, numInteraction: any, particleOffset: any) => Promise<void>;
     p2m: (numBoxIndex: number, particleOffset: any) => Promise<void>;
     m2m: (numBoxIndex: number, numBoxIndexOld: number, numLevel: number) => Promise<void>;
+    m2l: (numBoxIndex: number, numLevel: number) => Promise<void>;
+    l2l: (numBoxIndex: number, numLevel: number) => Promise<void>;
+    l2p: (numBoxIndex: number) => Promise<void>;
     Mnm: Array<Float32Array>;
+    Lnm: Array<Float32Array>;
 }
