@@ -59,7 +59,7 @@ export class KernelTs implements IKernel {
         this.particleCount = particleBuffer.length / 4;
         this.particleBuffer = particleBuffer;
         this.accelBuffer = new Float32Array(this.particleCount * 3);
-        this.precalc();
+        await this.precalc();
     }
     /** [4 * numExpansion2]; for p2m */
     factorial: Float32Array;
@@ -79,7 +79,11 @@ export class KernelTs implements IKernel {
     Anm: Float32Array;
     /** [4 * numExpansion2]; for m2m l2l*/
     anm: Float32Array;
-    precalc() {
+
+    //debug
+    Dnmd: Float32Array;
+    expBeta: Float32Array;
+    async precalc() {
         const core = this.core;
         this.Anm = new Float32Array(core.numExpansion4);
         this.anm = new Float32Array(4 * core.numExpansion2);
@@ -174,7 +178,7 @@ export class KernelTs implements IKernel {
             for (let m = 1; m <= n; m++) {
                 let anmd = n * (n + 1) - m * (m - 1);
                 for (let k = 1 - m; k < m; k++) {
-                    let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                    let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
                     let anmkd = ((n * (n + 1) - k * (k + 1))) / (n * (n + 1) - m * (m - 1));// double
                     anmk[0][nmk] = -(m + k) / Math.sqrt(anmd);
                     anmk[1][nmk] = Math.sqrt(anmkd);
@@ -189,6 +193,7 @@ export class KernelTs implements IKernel {
             let dz = boxIndex3D.z - 3;
             let { rho, alpha, beta } = this.cart2sph(dx, dy, dz);
 
+
             let sc = Math.sin(alpha) / (1 + Math.cos(alpha));
             for (let n = 0; n < 4 * core.numExpansions - 3; n++) {
                 let c = new Complex(0, (n - 2 * core.numExpansions + 2) * beta);
@@ -198,20 +203,29 @@ export class KernelTs implements IKernel {
             }
 
             for (let n = 0; n < core.numExpansions; n++) {
-                let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + n;
+                let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + n;
                 Dnmd[nmk] = Math.pow(Math.cos(alpha * 0.5), 2 * n);
+
+
                 for (let k = n; k >= 1 - n; k--) {
-                    nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k;
-                    let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k - 1;
+                    nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k;
+                    let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k - 1;
                     let ank = (n + k) / (n - k + 1);//double
                     Dnmd[nmk1] = Math.sqrt(ank) * Math.tan(alpha * 0.5) * Dnmd[nmk];
+                    
+
                 }
                 for (let m = n; m >= 1; m--) {
                     for (let k = m - 1; k >= 1 - m; k--) {
-                        nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
-                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + 1;
-                        let nm1k = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + (m - 1) * (2 * n + 1) + k;
+                        nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + 1;
+                        let nm1k = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + (m - 1) * (2 * n + 1) + k;
                         Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
+                        //if(nm1k==582){throw "here"}
+                        if (i == 27 && nm1k == 597) {
+                            console.log(`alpha=${alpha} | sc=${sc} |nmk=${nmk}`)
+                            console.log(`${anmk[1][nmk]} * ${Dnmd[nmk1]} + ${anmk[0][nmk]} * ${sc} * ${Dnmd[nmk]}`)
+                        }
                     }
                 }
             }
@@ -221,17 +235,19 @@ export class KernelTs implements IKernel {
                 for (let m = 0; m <= n; m++) {
                     for (let k = -m; k <= -1; k++) {
                         let ek = Math.pow(-1.0, k);
-                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
-                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
+                        let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
                         Dnmd[nmk] = ek * Dnmd[nmk];
                         Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
+
                     }
                     for (let k = 0; k <= m; k++) {
-                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
-                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + k * (2 * n + 1) + m;
-                        let nmk2 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
+                        let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + k * (2 * n + 1) + m;
+                        let nmk2 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
                         Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
                         Dnmd[nmk2] = Dnmd[nmk1];
+                        //console.log(`Dnmd[${nmk1}]: ${Dnmd[nmk1]}`);
                     }
                 }
             }
@@ -239,7 +255,7 @@ export class KernelTs implements IKernel {
             for (let n = 0; n < core.numExpansions; n++) {
                 for (let m = 0; m <= n; m++) {
                     for (let k = -n; k <= n; k++) {
-                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
                         let nk = n * (n + 1) + k;
                         let c = Complex.fromBuffer(expBeta, k + m + 2 * core.numExpansions - 2);
                         this.Dnm[i][m][nk * 2] = Dnmd[nmk] * c.re;
@@ -260,20 +276,22 @@ export class KernelTs implements IKernel {
             }
 
             for (let n = 0; n < core.numExpansions; n++) {
-                let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + n;
+                let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + n;
                 Dnmd[nmk] = Math.pow(Math.cos(alpha * 0.5), 2 * n);
                 for (let k = n; k >= 1 - n; k--) {
-                    nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k;
-                    let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k - 1;
-                    let ank = (n + k) / (n - k + 1);
+                    nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k;
+                    let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k - 1;
+                    let ank = (n + k) / (n - k + 1);//double
                     Dnmd[nmk1] = Math.sqrt(ank) * Math.tan(alpha * 0.5) * Dnmd[nmk];
+
                 }
                 for (let m = n; m >= 1; m--) {
                     for (let k = m - 1; k >= 1 - m; k--) {
-                        nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
-                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + 1;
-                        let nm1k = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + (m - 1) * (2 * n + 1) + k;
+                        nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + 1;
+                        let nm1k = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + (m - 1) * (2 * n + 1) + k;
                         Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
+
                     }
                 }
             }
@@ -282,15 +300,15 @@ export class KernelTs implements IKernel {
                 for (let m = 0; m <= n; m++) {
                     for (let k = -m; k <= -1; k++) {
                         let ek = Math.pow(-1.0, k);
-                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
-                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
+                        let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
                         Dnmd[nmk] = ek * Dnmd[nmk];
                         Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
                     }
                     for (let k = 0; k <= m; k++) {
-                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
-                        let nmk1 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + k * (2 * n + 1) + m;
-                        let nmk2 = Math.floor((4 * n * n * n + 6 * n * n + 5 * n)) / 3 - k * (2 * n + 1) - m;
+                        let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + k * (2 * n + 1) + m;
+                        let nmk2 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
                         Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
                         Dnmd[nmk2] = Dnmd[nmk1];
                     }
@@ -300,7 +318,7 @@ export class KernelTs implements IKernel {
             for (let n = 0; n < core.numExpansions; n++) {
                 for (let m = 0; m <= n; m++) {
                     for (let k = -n; k <= n; k++) {
-                        let nmk = Math.floor((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+                        let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
                         let nk = n * (n + 1) + k;
                         let c = Complex.fromBuffer(expBeta, k + m + 2 * core.numExpansions - 2);
                         this.Dnm[i + numRelativeBox][m][nk * 2] = Dnmd[nmk] * c.re;
@@ -315,6 +333,11 @@ export class KernelTs implements IKernel {
         //         Mnm[j][i] = 0;
         //     }
         // }
+
+
+        //debug
+        this.Dnmd = Dnmd;
+        this.expBeta = expBeta;
     }
 
 
@@ -473,7 +496,7 @@ export class KernelTs implements IKernel {
         }
         for (let jj = 0; jj < numBoxIndexOld; jj++) {
             let jb = jj + core.levelOffset[numLevel];
-            let nfjp = Math.floor(core.boxIndexFull[jb] / 8);
+            let nfjp = Math.trunc(core.boxIndexFull[jb] / 8);
             let nfjc = core.boxIndexFull[jb] % 8;
             let ib = core.boxIndexMask[nfjp] + core.levelOffset[numLevel - 1];
             let boxIndex3D = core.unmorton(nfjc);
@@ -525,31 +548,11 @@ export class KernelTs implements IKernel {
         const core = this.core;
 
 
-        let rawData = await (await fetch("data-Dnm.bin")).arrayBuffer();
-        const expectDnm = new Float32Array(rawData);
-        console.log(expectDnm);
-        let debugPos = 0;
-        for (let i = 0; i < 2 * numRelativeBox; i++) {
-
-            for (let j = 0; j < core.numExpansions; j++)
-                for (let k = 0; k < core.numExpansion2 * 2; k++) {
-                    let error = this.Dnm[i][j][k] - expectDnm[debugPos];
-                    if (Math.abs(error) > 0.001) {
-                        console.log(`[${i},${j},${k}] Expect: ${expectDnm[debugPos]} | Got: ${this.Dnm[i][j][k]} | ${error}`);
-         
-                    }
-                    debugPos++;
-                }
-        }
 
 
 
 
 
-        rawData = await (await fetch("data-m2l-vectors.bin")).arrayBuffer();
-        const expect = new Float32Array(rawData);
-        console.log(expect)
-        let pos = 0;
 
 
 
@@ -609,13 +612,6 @@ export class KernelTs implements IKernel {
                 }
                 let LnmVectorB = this.rotation(LnmVectorA, this.Dnm[je + numRelativeBox]);
                 //console.log(LnmVectorB);
-                for (let n of LnmVectorB) {
-                    let error = expect[pos] - n;
-                    if (Math.abs(error) > 0.001) {
-                      //  console.log(`[${Math.floor(pos / 110)},${pos % 110}] Expect: ${expect[pos]} | Got: ${n} | ${error}`);
-                    }
-                    pos++;
-                }
 
                 for (let j = 0; j < core.numCoefficients; j++) {
                     this.Lnm[ii][j * 2] += LnmVectorB[j * 2];
@@ -654,8 +650,8 @@ export class KernelTs implements IKernel {
             neo[i] = -1;
         for (let ii = 0; ii < numBoxIndex; ii++) {
             let ib = ii + core.levelOffset[numLevel - 1];
-            if (nbc != Math.floor(core.boxIndexFull[ib] / 8)) {
-                nbc = Math.floor(core.boxIndexFull[ib] / 8);
+            if (nbc != Math.trunc(core.boxIndexFull[ib] / 8)) {
+                nbc = Math.trunc(core.boxIndexFull[ib] / 8);
                 neo[nbc] = numBoxIndexOld;
                 numBoxIndexOld++;
             }
@@ -663,7 +659,7 @@ export class KernelTs implements IKernel {
 
         for (let ii = 0; ii < numBoxIndex; ii++) {
             let ib = ii + core.levelOffset[numLevel - 1];
-            let nfip = Math.floor(core.boxIndexFull[ib] / 8);
+            let nfip = Math.trunc(core.boxIndexFull[ib] / 8);
             let nfic = core.boxIndexFull[ib] % 8;
             let boxIndex3D = core.unmorton(nfic);
             boxIndex3D.x = boxIndex3D.x * 2 + 2;
