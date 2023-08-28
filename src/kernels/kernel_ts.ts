@@ -221,11 +221,6 @@ export class KernelTs implements IKernel {
                         let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + 1;
                         let nm1k = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + (m - 1) * (2 * n + 1) + k;
                         Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
-                        //if(nm1k==582){throw "here"}
-                        if (i == 27 && nm1k == 597) {
-                            console.log(`alpha=${alpha} | sc=${sc} |nmk=${nmk}`)
-                            console.log(`${anmk[1][nmk]} * ${Dnmd[nmk1]} + ${anmk[0][nmk]} * ${sc} * ${Dnmd[nmk]}`)
-                        }
                     }
                 }
             }
@@ -627,11 +622,6 @@ export class KernelTs implements IKernel {
     }
     async l2l(numBoxIndex: number, numLevel: number) {
 
-        //           int numBoxIndexOld, ii, ib, i, nfip, nfic, je, j, k, jk, jks, n, jnk, nk, nks;
-        //   vec3<int> boxIndex3D;
-        //   double boxSize, rho;
-        //   std::complex<double> cnm, LnmScalar;
-        //   std::complex<double> LnmVectorA[numCoefficients], LnmVectorB[numCoefficients];
         const core = this.core;
         const boxSize = core.rootBoxSize / (1 << numLevel);
 
@@ -642,7 +632,6 @@ export class KernelTs implements IKernel {
             this.LnmOld[ii] = this.Lnm[ii];
         }
 
-        //int nbc, neo[numBoxIndexFull];
         let nbc = -1;
         let neo = new Int32Array(core.numBoxIndexFull);
         numBoxIndexOld = 0;
@@ -698,16 +687,6 @@ export class KernelTs implements IKernel {
     }
     async l2p(numBoxIndex: number) {
 
-
-        //         int ii, i, n, nm, nms, m;
-        //   vec3<int> boxIndex3D;
-        //   vec3<float> boxCenter;
-        //   vec3<double> accel, dist;
-        //   double boxSize, r, theta, phi, accelR, accelTheta, accelPhi;
-        //   double xx, yy, s2, fact, pn, p, p1, p2, rn;
-        //   double YnmReal[numExpansion2], YnmRealTheta[numExpansion2];
-        //   std::complex<double> LnmVector[numCoefficients];
-        //   std::complex<double> rr, rtheta, rphi, I(0.0, 1.0), eim;
         const core = this.core;
 
         let YnmReal = new Float32Array(core.numExpansion2);
