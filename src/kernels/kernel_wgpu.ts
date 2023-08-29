@@ -1,5 +1,10 @@
 import wgsl_p2p from '../shaders/FMM_p2p.wgsl';
 import wgsl_p2m from '../shaders/FMM_p2m.wgsl';
+import wgsl_m2m from '../shaders/FMM_m2m.wgsl';
+// import wgsl_m2l from '../shaders/FMM_m2l.wgsl';
+// import wgsl_l2l from '../shaders/FMM_l2l.wgsl';
+// import wgsl_l2p from '../shaders/FMM_l2p.wgsl';
+
 
 import { IKernel } from './kernel';
 import { FMMSolver } from '../FMMSolver';
@@ -27,6 +32,7 @@ export class KernelWgpu implements IKernel {
   uniformBufferGPU: GPUBuffer;
   particleOffsetGPU: GPUBuffer;
   factorialGPU: GPUBuffer;
+  mnmBufferGPU: GPUBuffer;
 
   debug_info: any;
 
@@ -59,6 +65,10 @@ export class KernelWgpu implements IKernel {
       size: this.core.numExpansions * 2 * SIZEOF_32,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+    this.mnmBufferGPU = this.device.createBuffer({
+      size: this.core.numBoxIndexTotal * this.core.numCoefficients * 2 * SIZEOF_32,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
 
     this.device.queue.writeBuffer(this.particleBufferGPU, 0, particleBuffer);
 
@@ -66,8 +76,9 @@ export class KernelWgpu implements IKernel {
     this.shaders = {
       p2p: wgsl_p2p,
       p2m: wgsl_p2m,
+      m2m: wgsl_m2m,
     }
-    const nameList = "p2p p2m".split(" ");
+    const nameList = "p2p p2m m2m".split(" ");
     for (const n of nameList) {
       this.shaders[n] = this.device.createShaderModule({
         code: this.shaders[n],
@@ -176,7 +187,7 @@ export class KernelWgpu implements IKernel {
     //console.log(cmdBuffer); throw "pause";
     await this.RunCompute("p2p",
       [this.uniformBufferGPU, this.particleBufferGPU, this.resultBufferGPU, this.commandBufferGPU, this.particleOffsetGPU],
-      this.maxWorkgroupCount, true
+      this.maxWorkgroupCount, this.resultBufferGPU
     );
     //console.log("applyaccel");
     await this.readBufferGPU.mapAsync(GPUMapMode.READ);
@@ -233,8 +244,8 @@ export class KernelWgpu implements IKernel {
     this.device.queue.writeBuffer(this.uniformBufferGPU, uniformBuffer.byteLength, uniformBuffer2);
 
     await this.RunCompute("p2m",
-      [this.uniformBufferGPU, this.particleBufferGPU, this.resultBufferGPU, this.commandBufferGPU, this.particleOffsetGPU, this.factorialGPU],
-      numBoxIndex, true
+      [this.uniformBufferGPU, this.particleBufferGPU, this.mnmBufferGPU, this.commandBufferGPU, this.particleOffsetGPU, this.factorialGPU],
+      numBoxIndex, this.mnmBufferGPU
     );
 
     if (this.debug) {
@@ -261,7 +272,7 @@ export class KernelWgpu implements IKernel {
   async l2l(numBoxIndex: number, numLevel: number) { }
   async l2p(numBoxIndex: number) { }
 
-  async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>, workgroupCount = 1, readBuffer = true) {
+  async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>, workgroupCount = 1, readBuffer: GPUBuffer = null) {
     const shaderModule = this.shaders[entryPoint];
     const computePipeline = this.device.createComputePipeline({
       layout: 'auto', // infer from shader code.
@@ -289,7 +300,7 @@ export class KernelWgpu implements IKernel {
     computePassEncoder.end();
 
     if (readBuffer) {
-      commandEncoder.copyBufferToBuffer(this.resultBufferGPU, 0, this.readBufferGPU, 0, this.readBufferGPU.size);
+      commandEncoder.copyBufferToBuffer(readBuffer, 0, this.readBufferGPU, 0, readBuffer.size);
     }
     const gpuCommands = commandEncoder.finish();
     this.device.queue.submit([gpuCommands]);
