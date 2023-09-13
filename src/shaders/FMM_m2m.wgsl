@@ -20,8 +20,8 @@ struct Uniforms {
 @group(0) @binding(2) var<storage, read_write> command: array<i32>;
 @group(0) @binding(3) var<storage, read_write> Ynm: array<f32>;
 @group(0) @binding(4) var<storage, read_write> Dnm: array<f32>;
-@group(0) @binding(5) var<storage, read_write> ng: array<i32>;
-@group(0) @binding(6) var<storage, read_write> mg: array<i32>;
+// @group(0) @binding(5) var<storage, read_write> ng: array<i32>;
+// @group(0) @binding(6) var<storage, read_write> mg: array<i32>;
 
 
 
@@ -45,7 +45,15 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
   let mnmTarget =  command[boxIndex * 3 + 2];
 
   const numInteraction = 1u;
-
+  var ng:array<i32,threadsPerGroup>;
+  var mg:array<i32,threadsPerGroup>;
+  for (var n = 0; n < numExpansions; n++) {
+    for (var m = 0; m <= n; m++) {
+      let nms = n * (n + 1) / 2 + m;
+      ng[nms] = n;
+      mg[nms] = m;
+    }
+  }
   
   var MnmResult : vec2f;
   var tempTarget : vec2f;

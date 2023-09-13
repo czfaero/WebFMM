@@ -397,26 +397,26 @@ export class KernelWgpu implements IKernel {
     this.device.queue.writeBuffer(this.ynmBufferGPU, 0, this.Ynm);
     this.device.queue.writeBuffer(this.dnmBufferGPU, 0, this.Dnm);
 
-    let threadsPerGroup = 64;
-    let ng = new Float32Array(threadsPerGroup);
-    let mg = new Float32Array(threadsPerGroup);
-    for (let n = 0; n < core.numExpansions; n++) {
-      for (let m = 0; m <= n; m++) {
-        let nms = n * (n + 1) / 2 + m;
-        ng[nms] = n;
-        mg[nms] = m;
-      }
-    }
-    this.ngBufferGPU = this.device.createBuffer({
-      size: ng.byteLength,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    this.mgBufferGPU = this.device.createBuffer({
-      size: mg.byteLength,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(this.ngBufferGPU, 0, ng);
-    this.device.queue.writeBuffer(this.mgBufferGPU, 0, mg);
+    // let threadsPerGroup = 64;
+    // let ng = new Float32Array(threadsPerGroup);
+    // let mg = new Float32Array(threadsPerGroup);
+    // for (let n = 0; n < core.numExpansions; n++) {
+    //   for (let m = 0; m <= n; m++) {
+    //     let nms = n * (n + 1) / 2 + m;
+    //     ng[nms] = n;
+    //     mg[nms] = m;
+    //   }
+    // }
+    // this.ngBufferGPU = this.device.createBuffer({
+    //   size: ng.byteLength,
+    //   usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    // });
+    // this.mgBufferGPU = this.device.createBuffer({
+    //   size: mg.byteLength,
+    //   usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    // });
+    // this.device.queue.writeBuffer(this.ngBufferGPU, 0, ng);
+    // this.device.queue.writeBuffer(this.mgBufferGPU, 0, mg);
   }
   Dnm: Float32Array;
   Ynm: Float32Array;
@@ -628,9 +628,8 @@ export class KernelWgpu implements IKernel {
 
     await this.RunCompute("m2m",
       [this.uniformBufferGPU, this.mnmBufferGPU, this.commandBufferGPU,
-      this.ynmBufferGPU, this.dnmBufferGPU, this.ngBufferGPU, this.mgBufferGPU],
-      //numBoxIndexOld / boxPerGroup, 
-      4,
+      this.ynmBufferGPU, this.dnmBufferGPU],
+      numBoxIndexOld / boxPerGroup, 
       this.mnmBufferGPU
     );
 
