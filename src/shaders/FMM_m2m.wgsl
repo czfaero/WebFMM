@@ -2,160 +2,172 @@ const PI = 3.14159265358979323846;
 const inv4PI = 0.25/PI;
 const eps = 1e-6;
 
-const numExpansions = 10u;
+const numExpansions = 10;
 const numExpansion2 = numExpansions * numExpansions;
+const numCoefficients = numExpansions * (numExpansions + 1) / 2; //55
+const DnmSize = (4 * numExpansion2 * numExpansions - numExpansions) / 3;
+const numRelativeBox = 512; 
 
 struct Uniforms {
-  boxSize:f32,
-  boxMinX:f32,
-  boxMinY:f32,
-  boxMinZ:f32,
-  numBoxIndex: u32,
-  numExpansions: u32,
-  maxParticlePerBox:u32
+  boxSize:f32
 }
+
 
 
 
 @group(0) @binding(0) var<uniform> uniforms : Uniforms;
-@group(0) @binding(1) var<storage, read_write> particleBuffer: array<f32>;
-@group(0) @binding(2) var<storage, read_write> resultBuffer: array<f32>;
-@group(0) @binding(3) var<storage, read_write> command: array<u32>;
-@group(0) @binding(4) var<storage, read_write> particleOffset: array<u32>;
-@group(0) @binding(5) var<storage, read_write> factorial: array<f32>;
+@group(0) @binding(1) var<storage, read_write> Mnm: array<f32>;
+@group(0) @binding(2) var<storage, read_write> command: array<i32>;
+@group(0) @binding(3) var<storage, read_write> Ynm: array<f32>;
+@group(0) @binding(4) var<storage, read_write> Dnm: array<f32>;
+@group(0) @binding(5) var<storage, read_write> ng: array<i32>;
+@group(0) @binding(6) var<storage, read_write> mg: array<i32>;
 
-fn oddeven(n:i32){
-    return (n&1==1) ? -1:1;
+
+
+
+fn oddeven(n:i32) ->f32 {
+   if((n & 1) == 1) {return -1;} else {return 1;}
 }
 
-fn cart2sph(d : vec3f) -> vec3f
-{
-  var r = sqrt(d.x * d.x + d.y * d.y + d.z * d.z) + eps;
-  var theta = acos(d.z / r);
-  var phi:f32;
-  if (abs(d.x) + abs(d.y) < eps)
-  {
-    phi = 0;
-  }
-  else if (abs(d.x) < eps)
-  {
-    phi = d.y / abs(d.y) * PI * 0.5;
-  }
-  else if (d.x > 0)
-  {
-    phi = atan(d.y / d.x);
-  }
-  else
-  {
-    phi = atan(d.y / d.x) + PI;
-  }
-  return vec3f(r,theta,phi);
-}
+const boxPerGroup = 1u;
+const threadsPerGroup = 64u;
+var<workgroup> sharedMnmSource: array<f32, 2 * threadsPerGroup>; 
 
-var<workgroup> sharedYnm: array<f32, YnmLength>; 
-
-fn calculate_ynm(rho:f32, alpha:f32)
-{
-  var xx = cos(alpha);
-  var s2 = sqrt((1 - xx) * (1 + xx));
-  var fact : f32 = 1;
-  var pn : f32 = 1.0;
-  var rhom : f32 = 1;
-  for(var m : i32 = 0; m < numExpansions; m++){
-    var p = pn;
-    var npn = m * m + 2 * m;
-    var nmn = m * m;
-    sharedYnm[npn] = rhom * p / factorial[2 * m];
-    sharedYnm[nmn] = sharedYnm[npn];
-    var p1 = p;
-    p = xx * (2 * m + 1) * p;
-    rhom *= -rho;
-    var rhon = rhom;
-    for(var n = m + 1; n < numExpansions; n++){
-      npm = n * n + n + m;
-      nmm = n * n + n - m;
-      sharedYnm[npm] = rhon * p / factorial[n+m];
-      sharedYnm[nmm] = sharedYnm[npm];
-      var p2 = p1;
-      p1 = p;
-      p = (xx * (2 * n + 1) * p1 - (n + m) * p2) / (n - m + 1);
-      rhon *= -rho;
-    }
-    pn = -pn * fact * s2;
-    fact = fact + 2;
-  }
-}
-
-fn core(j:i32,  beta:f32, )
-{
-  int   nm, jnkms;
-  float ere, eim, ajk, ajnkm, cnm, CnmReal, CnmImag;
-  var k = 0;
-  for(var i = 0; i <= j; i++ ){k += i;}
-  k = threadIdx.x - k; 
-  ajk = oddeven(j) * rsqrtf(factorial[j - k] * factorial[j + k]);
-  var MnmTarget : vec2f;
-  for(var n = 0; n <= j; n++){
-    for(var m = -n; m <= min(k-1,n); m++){
-      if(j - n >= k - m){
-        let nm = n * n + n + m;
-        let jnkms = (j - n) * (j - n + 1) / 2 + k - m;
-        let ere = cosf(-m * beta);
-        let eim = sinf(-m * beta);
-        let ajnkm = rsqrtf(factorial[j - n - k + m] * factorial[j - n + k - m]);
-        var cnm = ODDEVEN(m + j);
-        cnm *= ajnkm / ajk * sharedYnm[nm];
-        let CnmReal = cnm * ere;
-        let CnmImag = cnm * eim;
-        MnmTarget[0] += MnmSource[2 * jnkms + 0] * CnmReal;
-        MnmTarget[0] -= MnmSource[2 * jnkms + 1] * CnmImag;
-        MnmTarget[1] += MnmSource[2 * jnkms + 0] * CnmImag;
-        MnmTarget[1] += MnmSource[2 * jnkms + 1] * CnmReal;
-      }
-    }
-    for(var m = k; m <= n; m++){
-      if(var j - n >= m - k){
-        let nm = n * n + n + m;
-        let jnkms = (j - n) * (j - n + 1) / 2 - k + m;
-        let ere = cosf(-m * beta);
-        let eim = sinf(-m * beta);
-        let ajnkm = rsqrtf(factorial[j - n - k + m]
-                     * factorial[j - n + k - m]);
-        var cnm = oddeven(k + j + m);
-        cnm *= ajnkm / ajk * sharedYnm[nm];
-        CnmReal = cnm * ere;
-        CnmImag = cnm * eim;
-        MnmTarget[0] += sharedMnmSource[2 * jnkms + 0] * CnmReal;
-        MnmTarget[0] += sharedMnmSource[2 * jnkms + 1] * CnmImag;
-        MnmTarget[1] += sharedMnmSource[2 * jnkms + 0] * CnmImag;
-        MnmTarget[1] -= sharedMnmSource[2 * jnkms + 1] * CnmReal;
-      }
-    }
-  }
-}
-
+@compute @workgroup_size(threadsPerGroup, boxPerGroup) 
 fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>, 
        @builtin(workgroup_id) group_id:vec3<u32>)
 {
-  numInteraction = 1;
-  var j=0;
-  for(j = 0;j < numExpansions; j++){
-    for(k = 0; k <= j; k++){
-      i = j * (j + 1) / 2 + k;
-      if(i==local_id.x){break;}
-    }
-  }
+  let threadId = i32(local_id.x);
+  let boxIndex = group_id.x;
+  let mnmSource = command[boxIndex * 3 + 0];//Mnm index
+  let je =  command[boxIndex * 3 + 1];// result of morton1
+  let mnmTarget =  command[boxIndex * 3 + 2];
+
+  const numInteraction = 1u;
+
   
+  var MnmResult : vec2f;
+  var tempTarget : vec2f;
 
-  for(var ij = 0; ij < numInteraction; ij++){
-   // todo: get MnmSource
-
-    let r = cart2sph(dist);
-    let rho = r.x; let alpha = r.y; beta= r.z;
-
-    calculate_ynm(sharedYnm, rho, alpha);
-
-    let  MnmResult = core(j, beta);
+  for(var ij = 0u; ij < numInteraction; ij++){
+    let MnmSourceOffset = mnmSource * numCoefficients * 2;
+    sharedMnmSource[2 * threadId] = Mnm[2 * (MnmSourceOffset + threadId) ]; 
+    sharedMnmSource[2 * threadId + 1] = Mnm[2 * (MnmSourceOffset + threadId) + 1];
+    workgroupBarrier();
+    let rho = uniforms.boxSize * sqrt(3.0) / 4;
+    {
+      let jbase = (je - 1) * DnmSize;
+      let n = ng[local_id.x];
+      let m = mg[local_id.x];
+      let nms = n * (n + 1) / 2 + m;
+      // for (i = 0; i < 2; i++)
+      //   tempTarget[i] = 0;
+      for (var k = -n; k < 0; k++)
+      {
+        let nks = n * (n + 1) / 2 - k;
+        let nmk = jbase + (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+        let DnmReal = Dnm[2 * nmk + 0];
+        let DnmImag = Dnm[2 * nmk + 1];
+        tempTarget.x += DnmReal * sharedMnmSource[2 * nks + 0];
+        tempTarget.x += DnmImag * sharedMnmSource[2 * nks + 1];
+        tempTarget.y -= DnmReal * sharedMnmSource[2 * nks + 1];
+        tempTarget.y += DnmImag * sharedMnmSource[2 * nks + 0];
+      }
+      for (var k = 0; k <= n; k++)
+      {
+        let nks = n * (n + 1) / 2 + k;
+        let nmk = jbase + (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+        let DnmReal = Dnm[2 * nmk + 0];
+        let DnmImag = Dnm[2 * nmk + 1];
+        tempTarget.x += DnmReal * sharedMnmSource[2 * nks + 0];
+        tempTarget.x -= DnmImag * sharedMnmSource[2 * nks + 1];
+        tempTarget.y += DnmReal * sharedMnmSource[2 * nks + 1];
+        tempTarget.y += DnmImag * sharedMnmSource[2 * nks + 0];
+      }
+      workgroupBarrier();
+      sharedMnmSource[2 * nms ] = tempTarget.x;
+      sharedMnmSource[2 * nms + 1] = tempTarget.y;
+    }
+    workgroupBarrier();
+    {
+      let j = ng[local_id.x];
+      let k = mg[local_id.x];
+      let jks = j * (j + 1) / 2 + k;
+      tempTarget = vec2f(0,0);
+      var fnmm = 1.0;
+      for (var i = 0; i < j - k; i++){fnmm = fnmm * f32(i + 1);}
+      var fnpm = 1.0;
+      for (var i = 0; i < j + k; i++){fnpm = fnpm * f32(i + 1);}
+      let ajk = oddeven(j) * inverseSqrt(fnmm * fnpm);
+      var rhon = 1.0;
+      for (var n = 0; n <= j - abs(k); n++)
+      {
+        let nks = (j - n) * (j - n + 1) / 2 + k;
+        let jnk = n * n + n;
+        fnmm = 1.0;
+        for (var i = 0; i < j - n - k; i++){fnmm = fnmm * f32(i + 1);}
+        fnpm = 1.0;
+        for (var i = 0; i < j - n + k; i++){fnpm = fnpm * f32(i + 1);}
+        let ank = oddeven(j - n) * inverseSqrt(fnmm * fnpm);
+        fnpm = 1.0;
+        for (var i = 0; i < n; i++){fnpm = fnpm * f32(i + 1);}
+        let ajn = oddeven(n) / fnpm;
+        let sr = oddeven(n) * ank * ajn / ajk;
+        let CnmReal = sr * Ynm[jnk*2] * rhon; // carefully
+        let CnmImag = sr * Ynm[jnk*2+1] * rhon;
+        tempTarget.x += sharedMnmSource[2 * nks + 0] * CnmReal;
+        tempTarget.x -= sharedMnmSource[2 * nks + 1] * CnmImag;
+        tempTarget.y += sharedMnmSource[2 * nks + 0] * CnmImag;
+        tempTarget.y += sharedMnmSource[2 * nks + 1] * CnmReal;
+        rhon *= rho;
+      }
+      workgroupBarrier();
+      sharedMnmSource[2 * jks ] = tempTarget.x;
+      sharedMnmSource[2 * jks + 1] = tempTarget.y;
+    }
+    workgroupBarrier();
+    {
+      let jbase = (je + numRelativeBox - 1) * DnmSize;
+      let n = ng[local_id.x];
+      let m = mg[local_id.x];
+      let nms = n * (n + 1) / 2 + m;
+      tempTarget = vec2f(0,0);
+      for (var k = -n; k < 0; k++)
+      {
+        let nks = n * (n + 1) / 2 - k;
+        let nmk = jbase + (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+        let DnmReal = Dnm[2 * nmk + 0];
+        let DnmImag = Dnm[2 * nmk + 1];
+        tempTarget.x += DnmReal * sharedMnmSource[2 * nks + 0];
+        tempTarget.x += DnmImag * sharedMnmSource[2 * nks + 1];
+        tempTarget.y -= DnmReal * sharedMnmSource[2 * nks + 1];
+        tempTarget.y += DnmImag * sharedMnmSource[2 * nks + 0];
+      }
+      for (var k = 0; k <= n; k++)
+      {
+        let nks = n * (n + 1) / 2 + k;
+        let nmk = jbase + (4 * n * n * n + 6 * n * n + 5 * n) / 3 + m * (2 * n + 1) + k;
+        let DnmReal = Dnm[2 * nmk + 0];
+        let DnmImag = Dnm[2 * nmk + 1];
+        tempTarget.x += DnmReal * sharedMnmSource[2 * nks + 0];
+        tempTarget.x -= DnmImag * sharedMnmSource[2 * nks + 1];
+        tempTarget.y += DnmReal * sharedMnmSource[2 * nks + 1];
+        tempTarget.y += DnmImag * sharedMnmSource[2 * nks + 0];
+      }
+    }
+   MnmResult += tempTarget;
+   workgroupBarrier();
   }
-  // todo: write output
+  for(var x=0;x<=8;x++){
+    if(threadId%8==x){
+      let mnmTargetOffset = mnmTarget * numCoefficients * 2 + threadId;
+      Mnm[mnmTargetOffset*2] += MnmResult.x;
+      Mnm[mnmTargetOffset*2+1] += MnmResult.y;
+    }
+    workgroupBarrier();
+  }
+
+  // debug
+  //Mnm[boxIndex]=f32(mnmTarget);
 }

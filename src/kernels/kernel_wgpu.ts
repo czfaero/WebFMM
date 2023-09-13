@@ -9,7 +9,51 @@ import wgsl_m2m from '../shaders/FMM_m2m.wgsl';
 import { IKernel } from './kernel';
 import { FMMSolver } from '../FMMSolver';
 
+import { Tester } from '../tester';
+
+const eps = 1e-6;
+const inv4PI = 0.25 / Math.PI;
+
 const SIZEOF_32 = 4;
+
+const numRelativeBox = 512;        // max of relative box positioning
+
+class Complex {
+  re: number;
+  im: number;
+  multiply(cn2: Complex): Complex {
+    const cn1 = this;
+    return new Complex(
+      cn1.re * cn2.re - cn1.im * cn2.im,
+      cn1.re * cn2.im + cn1.im * cn2.re);
+  }
+  multiplyReal(x: number): Complex {
+    const cn1 = this;
+    return new Complex(
+      cn1.re * x,
+      cn1.im * x);
+  }
+  conj() {
+    return new Complex(this.re, -this.im);
+  }
+  exp() {
+    const tmp = Math.exp(this.re);
+    return new Complex(
+      Math.cos(this.im) * tmp,
+      Math.sin(this.im) * tmp
+    );
+  }
+
+  static fromBuffer(b: Float64Array, i: number): Complex {
+    return new Complex(b[i * 2], b[i * 2 + 1]);
+  };
+  constructor(re: number, im = 0) {
+    this.re = re;
+    this.im = im;
+  }
+}
+
+
 
 export class KernelWgpu implements IKernel {
   core: FMMSolver;
@@ -33,6 +77,10 @@ export class KernelWgpu implements IKernel {
   particleOffsetGPU: GPUBuffer;
   factorialGPU: GPUBuffer;
   mnmBufferGPU: GPUBuffer;
+  ynmBufferGPU: GPUBuffer;
+  dnmBufferGPU: GPUBuffer;
+  mgBufferGPU: GPUBuffer;
+  ngBufferGPU: GPUBuffer;
 
   debug_info: any;
 
@@ -90,7 +138,288 @@ export class KernelWgpu implements IKernel {
       this.debug_info["particleBufferGPU"] = this.particleBufferGPU.size;
       this.debug_info["uniformBufferGPU"] = this.uniformBufferGPU.size;
     }
+
+    await this.precalc();
   }
+
+  async precalc() {
+    const core = this.core;
+    const Ynm = new Float64Array(4 * core.numExpansion2 * 2);
+    /** complex [2 * numRelativeBox][numExpansions][numExpansion2]; for rotation -> m2m */
+    const Dnm: Array<Array<Float64Array>> = new Array(2 * numRelativeBox);
+    for (let i = 0; i < 2 * numRelativeBox; i++) {
+      Dnm[i] = new Array(core.numExpansions);
+      for (let j = 0; j < core.numExpansions; j++)
+        Dnm[i][j] = new Float64Array(core.numExpansion2 * 2);
+    }
+    /** [2][numExpansion4]; for Dnmd -> Dnm */
+    const anmk = [new Float64Array(core.numExpansion4), new Float64Array(core.numExpansion4)];
+    /** [numExpansion4]; for Dnm */
+    const Dnmd = new Float64Array(core.numExpansion4);
+    /** complex [numExpansion2]; for Dnm */
+    const expBeta = new Float64Array(core.numExpansion2 * 2);
+    const factorial = new Float64Array(2 * core.numExpansions);
+
+
+    for (let n = 0; n < 2 * core.numExpansions; n++) {
+      for (let m = -n; m <= n; m++) {
+        let nm = n * n + n + m;
+        const nabsm = Math.abs(m);
+        let fnmm = 1.0;
+        for (let i = 1; i <= n - m; i++)
+          fnmm *= i;
+        let fnpm = 1.0;
+        for (let i = 1; i <= n + m; i++)
+          fnpm *= i;
+        let fnma = 1.0;
+        for (let i = 1; i <= n - nabsm; i++)
+          fnma *= i;
+        let fnpa = 1.0;
+        for (let i = 1; i <= n + nabsm; i++)
+          fnpa *= i;
+        factorial[nm] = Math.sqrt(fnma / fnpa);
+      }
+    }
+
+    let pn = 1;
+    for (let m = 0; m < 2 * core.numExpansions; m++) {
+      let p = pn;
+      let npn = m * m + 2 * m;
+      let nmn = m * m;
+      Ynm[npn * 2] = factorial[npn] * p;
+      Ynm[nmn * 2] = Ynm[npn * 2];//conj(Ynm[npn*2])
+      let p1 = p;
+      p = (2 * m + 1) * p;
+      for (let n = m + 1; n < 2 * core.numExpansions; n++) {
+        let npm = n * n + n + m;
+        let nmm = n * n + n - m;
+        Ynm[npm * 2] = factorial[npm] * p;
+        Ynm[nmm * 2] = Ynm[npm * 2];//conj(Ynm[npm*2]);
+        let p2 = p1;
+        p1 = p;
+        p = ((2 * n + 1) * p1 - (n + m) * p2) / (n - m + 1);
+      }
+      pn = 0;
+    }
+
+    for (let n = 0; n < core.numExpansions; n++) {
+      for (let m = 1; m <= n; m++) {
+        let anmd = n * (n + 1) - m * (m - 1);
+        for (let k = 1 - m; k < m; k++) {
+          let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+          let anmkd = ((n * (n + 1) - k * (k + 1))) / (n * (n + 1) - m * (m - 1));// double
+          anmk[0][nmk] = -(m + k) / Math.sqrt(anmd);
+          anmk[1][nmk] = Math.sqrt(anmkd);
+        }
+      }
+    }
+
+    for (let i = 0; i < numRelativeBox; i++) {
+      let boxIndex3D = core.unmorton(i);
+      let xijc = boxIndex3D.x - 3;
+      let yijc = boxIndex3D.y - 3;
+      let zijc = boxIndex3D.z - 3;
+      const rho = Math.sqrt(xijc * xijc + yijc * yijc + zijc * zijc) + eps;
+      let alpha = Math.acos(zijc / rho);
+      let beta;
+      if (Math.abs(xijc) + Math.abs(yijc) < eps) {
+        beta = 0;
+      }
+      else if (Math.abs(xijc) < eps) {
+        beta = yijc / Math.abs(yijc) * Math.PI * 0.5;
+      }
+      else if (xijc > 0) {
+        beta = Math.atan(yijc / xijc);
+      }
+      else {
+        beta = Math.atan(yijc / xijc) + Math.PI;
+      }
+
+      let sc = Math.sin(alpha) / (1 + Math.cos(alpha));
+      for (let n = 0; n < 4 * core.numExpansions - 3; n++) {
+        let c = new Complex(0, (n - 2 * core.numExpansions + 2) * beta);
+        let c2 = c.exp();
+        expBeta[n * 2] = c2.re;
+        expBeta[n * 2 + 1] = c2.im;
+      }
+
+      for (let n = 0; n < core.numExpansions; n++) {
+        let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + n;
+        Dnmd[nmk] = Math.pow(Math.cos(alpha * 0.5), 2 * n);
+        for (let k = n; k >= 1 - n; k--) {
+          nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k;
+          let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k - 1;
+          let ank = (n + k) / (n - k + 1);//double
+          Dnmd[nmk1] = Math.sqrt(ank) * Math.tan(alpha * 0.5) * Dnmd[nmk];
+        }
+        for (let m = n; m >= 1; m--) {
+          for (let k = m - 1; k >= 1 - m; k--) {
+            nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+            let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + 1;
+            let nm1k = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + (m - 1) * (2 * n + 1) + k;
+            Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
+          }
+        }
+      }
+
+      for (let n = 1; n < core.numExpansions; n++) {
+        for (let m = 0; m <= n; m++) {
+          for (let k = -m; k <= -1; k++) {
+            let ek = Math.pow(-1.0, k);
+            let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+            let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
+            Dnmd[nmk] = ek * Dnmd[nmk];
+            Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
+
+          }
+          for (let k = 0; k <= m; k++) {
+            let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+            let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + k * (2 * n + 1) + m;
+            let nmk2 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
+            Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
+            Dnmd[nmk2] = Dnmd[nmk1];
+          }
+        }
+      }
+
+      for (let n = 0; n < core.numExpansions; n++) {
+        for (let m = 0; m <= n; m++) {
+          for (let k = -n; k <= n; k++) {
+            let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+            let nk = n * (n + 1) + k;
+            let c = Complex.fromBuffer(expBeta, k + m + 2 * core.numExpansions - 2);
+            Dnm[i][m][nk * 2] = Dnmd[nmk] * c.re;
+            Dnm[i][m][nk * 2 + 1] = Dnmd[nmk] * c.im;
+          }
+        }
+      }
+
+      alpha = -alpha;
+      beta = -beta;
+
+      sc = Math.sin(alpha) / (1 + Math.cos(alpha));
+      for (let n = 0; n < 4 * core.numExpansions - 3; n++) {
+        let c = new Complex(0, (n - 2 * core.numExpansions + 2) * beta);
+        let c2 = c.exp();
+        expBeta[n * 2] = c2.re;
+        expBeta[n * 2 + 1] = c2.im;
+      }
+
+      for (let n = 0; n < core.numExpansions; n++) {
+        let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + n;
+        Dnmd[nmk] = Math.pow(Math.cos(alpha * 0.5), 2 * n);
+        for (let k = n; k >= 1 - n; k--) {
+          nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k;
+          let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k - 1;
+          let ank = (n + k) / (n - k + 1);//double
+          Dnmd[nmk1] = Math.sqrt(ank) * Math.tan(alpha * 0.5) * Dnmd[nmk];
+
+        }
+        for (let m = n; m >= 1; m--) {
+          for (let k = m - 1; k >= 1 - m; k--) {
+            nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+            let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + 1;
+            let nm1k = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + (m - 1) * (2 * n + 1) + k;
+            Dnmd[nm1k] = anmk[1][nmk] * Dnmd[nmk1] + anmk[0][nmk] * sc * Dnmd[nmk];
+
+          }
+        }
+      }
+
+      for (let n = 1; n < core.numExpansions; n++) {
+        for (let m = 0; m <= n; m++) {
+          for (let k = -m; k <= -1; k++) {
+            let ek = Math.pow(-1.0, k);
+            let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+            let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
+            Dnmd[nmk] = ek * Dnmd[nmk];
+            Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
+          }
+          for (let k = 0; k <= m; k++) {
+            let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+            let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + k * (2 * n + 1) + m;
+            let nmk2 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) - k * (2 * n + 1) - m;
+            Dnmd[nmk1] = Math.pow(-1.0, m + k) * Dnmd[nmk];
+            Dnmd[nmk2] = Dnmd[nmk1];
+          }
+        }
+      }
+
+      for (let n = 0; n < core.numExpansions; n++) {
+        for (let m = 0; m <= n; m++) {
+          for (let k = -n; k <= n; k++) {
+            let nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k;
+            let nk = n * (n + 1) + k;
+            let c = Complex.fromBuffer(expBeta, k + m + 2 * core.numExpansions - 2);
+            Dnm[i + numRelativeBox][m][nk * 2] = Dnmd[nmk] * c.re;
+            Dnm[i + numRelativeBox][m][nk * 2 + 1] = Dnmd[nmk] * c.im;
+          }
+        }
+      }
+    }
+
+    this.Ynm = new Float32Array(2 * core.numExpansion2);
+    for (let m = 0; m < core.numExpansions; m++) {
+      for (let n = m; n < core.numExpansions; n++) {
+        const npm = n * n + n + m;
+        const nmm = n * n + n - m;
+        this.Ynm[npm * 2 + 0] = Ynm[npm * 2];
+        this.Ynm[nmm * 2 + 0] = Ynm[nmm * 2];
+        this.Ynm[npm * 2 + 1] = Ynm[npm * 2 + 1];
+        this.Ynm[nmm * 2 + 1] = Ynm[nmm * 2 + 1];
+      }
+    }
+
+    const DnmSize = (4 * core.numExpansion2 * core.numExpansions - core.numExpansions) / 3;
+    this.Dnm = new Float32Array(2 * DnmSize * 2 * numRelativeBox);
+    for (let je = 0; je < 2 * numRelativeBox; je++) {
+      for (let n = 0; n < core.numExpansions; n++) {
+        for (let m = 0; m <= n; m++) {
+          for (let k = -n; k <= n; k++) {
+            const nk = n * (n + 1) + k;
+            const nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + je * DnmSize;
+            this.Dnm[2 * nmk + 0] = Dnm[je][m][nk * 2];
+            this.Dnm[2 * nmk + 1] = Dnm[je][m][nk * 2 + 1];
+          }
+        }
+      }
+    }
+    await Tester.VerifyFloatBuffer("data-hostDnm.bin", this.Dnm);
+
+    this.ynmBufferGPU = this.device.createBuffer({
+      size: this.Ynm.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.dnmBufferGPU = this.device.createBuffer({
+      size: this.Dnm.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.device.queue.writeBuffer(this.ynmBufferGPU, 0, this.Ynm);
+    this.device.queue.writeBuffer(this.dnmBufferGPU, 0, this.Dnm);
+
+    let threadsPerGroup = 64;
+    let ng = new Float32Array(threadsPerGroup);
+    let mg = new Float32Array(threadsPerGroup);
+    for (let n = 0; n < core.numExpansions; n++) {
+      for (let m = 0; m <= n; m++) {
+        let nms = n * (n + 1) / 2 + m;
+        ng[nms] = n;
+        mg[nms] = m;
+      }
+    }
+    this.ngBufferGPU = this.device.createBuffer({
+      size: ng.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.mgBufferGPU = this.device.createBuffer({
+      size: mg.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.device.queue.writeBuffer(this.ngBufferGPU, 0, ng);
+    this.device.queue.writeBuffer(this.mgBufferGPU, 0, mg);
+  }
+  Dnm: Float32Array;
+  Ynm: Float32Array;
   async p2p(numBoxIndex: number, interactionList: any, numInteraction: any, particleOffset: any) {
     if (this.debug) {
       this.debug_p2p_call_count = 0;
@@ -204,8 +533,10 @@ export class KernelWgpu implements IKernel {
     this.readBufferGPU.unmap();
   }
 
+  /** only for debug. complex [numBoxIndexTotal][numCoefficients] */
   Mnm: Array<Float32Array>;
   Lnm: Array<Float32Array>;
+  factorial: Float32Array;
   async p2m(numBoxIndex: number, particleOffset: any) {
 
     let fact = 1.0;
@@ -215,6 +546,8 @@ export class KernelWgpu implements IKernel {
       fact = fact * (m + 1);
     }
     this.device.queue.writeBuffer(this.factorialGPU, 0, factorial);
+    this.factorial = factorial;
+
 
     // command (boxId)
     let command = new Uint32Array(numBoxIndex);
@@ -266,7 +599,56 @@ export class KernelWgpu implements IKernel {
   }
 
   async m2m(numBoxIndex: number, numBoxIndexOld: number, numLevel: number) {
+    const core = this.core;
+    let command = new Int32Array(numBoxIndexOld * 3);
+    const boxPerGroup = 4;
 
+    for (let jj = 0; jj < numBoxIndexOld; jj++) {
+      let jb = jj + core.levelOffset[numLevel];
+      let nfjp = Math.trunc(core.boxIndexFull[jb] / 8);
+      let nfjc = core.boxIndexFull[jb] % 8;
+      let ib = core.boxIndexMask[nfjp] + core.levelOffset[numLevel - 1];
+      let boxIndex3D = core.unmorton(nfjc);
+      boxIndex3D.x = 4 - boxIndex3D.x * 2;
+      boxIndex3D.y = 4 - boxIndex3D.y * 2;
+      boxIndex3D.z = 4 - boxIndex3D.z * 2;
+      let je = core.morton1(boxIndex3D, 3);
+      command[jj * 3 + 0] = jb;//Mnm index
+      command[jj * 3 + 1] = je;
+      command[jj * 3 + 2] = ib;//target index
+      //console.log(ib)
+    }
+
+    this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, numBoxIndexOld * 3);
+    const boxSize = this.core.rootBoxSize / (1 << this.core.maxLevel);
+
+    const uniformBuffer = new Float32Array(1);
+    uniformBuffer[0] = boxSize;
+    this.device.queue.writeBuffer(this.uniformBufferGPU, 0, uniformBuffer);
+
+    await this.RunCompute("m2m",
+      [this.uniformBufferGPU, this.mnmBufferGPU, this.commandBufferGPU,
+      this.ynmBufferGPU, this.dnmBufferGPU, this.ngBufferGPU, this.mgBufferGPU],
+      //numBoxIndexOld / boxPerGroup, 
+      4,
+      this.mnmBufferGPU
+    );
+
+    if (this.debug) {
+      await this.readBufferGPU.mapAsync(GPUMapMode.READ);
+      const handle = this.readBufferGPU.getMappedRange();
+      let tempReadBuffer = new Float32Array(handle);
+      this.Mnm = new Array(this.core.numBoxIndexTotal);
+      for (let i = 0; i < this.core.numBoxIndexTotal; i++) {
+        const MnmVec = new Float32Array(this.core.numCoefficients * 2);
+        for (let j = 0; j < this.core.numCoefficients * 2; j++) {
+          MnmVec[j] = tempReadBuffer[i * this.core.numCoefficients * 2 + j];
+        }
+        this.Mnm[i] = MnmVec;
+      }
+      this.readBufferGPU.unmap();
+      console.log(this.Mnm)
+    }
   }
   async m2l(numBoxIndex: number, numLevel: number) { }
   async l2l(numBoxIndex: number, numLevel: number) { }

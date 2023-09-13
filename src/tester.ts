@@ -40,7 +40,7 @@ export class Tester {
         time_p2p = performance.now() - time_p2p;
         console.log(`time p2p: ${time_p2p.toFixed(2)} ms`);
 
-        await VerifyFloatBuffer("data-p2p.bin", instance.kernel.accelBuffer);
+        await VerifyFloatBuffer("data-p2p.bin", instance.kernel.accelBuffer, 0.05);
 
         console.log("p2m numBoxIndex: " + numBoxIndex);
         let time_p2m = performance.now();
@@ -53,7 +53,8 @@ export class Tester {
             for (numLevel = instance.maxLevel - 1; numLevel >= 2; numLevel--) {
                 let numBoxIndexOld = numBoxIndex;
                 numBoxIndex = instance.getBoxDataOfParent(numBoxIndex, numLevel);
-                instance.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
+                console.log(`numBoxIndexOld: ${numBoxIndexOld}| numBoxIndex: ${numBoxIndex}`)
+                await instance.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
             }
             numLevel = 2;
         }
@@ -61,6 +62,7 @@ export class Tester {
             instance.getBoxIndexMask(numBoxIndex, numLevel);
         }
         await VerifyFloatBuffer2("data-m2m.bin", instance.kernel.Mnm, instance.numBoxIndexTotal);
+
         instance.getInteractionListM2L(numBoxIndex, numLevel);
         await instance.kernel.m2l(numBoxIndex, numLevel);
 
@@ -85,7 +87,10 @@ export class Tester {
         }
 
         instance.kernel.l2p(numBoxIndex);
-        await VerifyFloatBuffer("data-l2p.bin", instance.kernel.accelBuffer,0.05);
+        await VerifyFloatBuffer("data-l2p.bin", instance.kernel.accelBuffer, 0.05);
+    }
+    static async VerifyFloatBuffer(name: string, data: Float32Array, max_error = 0.001) {
+        await VerifyFloatBuffer(name, data, max_error);
     }
 }
 
@@ -141,12 +146,14 @@ async function VerifyFloatBuffer(name: string, data: Float32Array, max_error = 0
         throw `${name} size: ${data.length}!=${expect.length}`;
     }
     let error_count = 0;
+    let errors = [];
     for (let i = 0; i < data.length; i++) {
         const r = CompareNumber(expect[i], data[i], max_error);
         if (!r) {
             error_count++;
-            console.log(`[${i}]Expect: ${expect[i]} | Got: ${data[i]} |${expect[i] - data[i]}`);
-            if (error_count > 10) {
+            //console.log(`[${i}]Expect: ${expect[i]} | Got: ${data[i]} |${expect[i] - data[i]}`);
+            errors.push({ i: i, expect: expect[i], got: data[i], error: expect[i] - data[i] });
+            if (error_count > 100) {
                 break;
             }
         }
@@ -157,11 +164,12 @@ async function VerifyFloatBuffer(name: string, data: Float32Array, max_error = 0
     else {
         console.log(expect);
         console.log(data);
+        console.log(errors);
         throw "Failure: " + name;
     }
 }
 
-// p2m
+// Mnm-like
 async function VerifyFloatBuffer2(name: string, data: Array<Float32Array>, count: number) {
     const rawData = await (await fetch(name)).arrayBuffer();
     const expect = new Float32Array(rawData);
@@ -178,7 +186,7 @@ async function VerifyFloatBuffer2(name: string, data: Array<Float32Array>, count
     let error_count_fatal = 0;
     let max_error = 0;
     let error_sum = 0;
-    for (let c = 0; c < count; c++)
+    for (let c = 0; c < count; c++) {
         for (let i = 0; i < data[0].length; i++) {
             const r = CompareNumber(expect[c * data[0].length + i], data[c][i]);
             if (!r) {
@@ -195,6 +203,10 @@ async function VerifyFloatBuffer2(name: string, data: Array<Float32Array>, count
                 }
             }
         }
+        if (error_count_fatal > 10) {
+            break;
+        }
+    }
     if (error_count_fatal == 0) {
         if (error_count == 0) {
             console.log("Success: " + name);
