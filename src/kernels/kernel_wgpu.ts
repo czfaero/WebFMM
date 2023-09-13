@@ -158,19 +158,13 @@ export class KernelWgpu implements IKernel {
     const Dnmd = new Float64Array(core.numExpansion4);
     /** complex [numExpansion2]; for Dnm */
     const expBeta = new Float64Array(core.numExpansion2 * 2);
-    const factorial = new Float64Array(2 * core.numExpansions);
+    const factorial = new Float64Array(4 * core.numExpansion2);
 
 
     for (let n = 0; n < 2 * core.numExpansions; n++) {
       for (let m = -n; m <= n; m++) {
         let nm = n * n + n + m;
         const nabsm = Math.abs(m);
-        let fnmm = 1.0;
-        for (let i = 1; i <= n - m; i++)
-          fnmm *= i;
-        let fnpm = 1.0;
-        for (let i = 1; i <= n + m; i++)
-          fnpm *= i;
         let fnma = 1.0;
         for (let i = 1; i <= n - nabsm; i++)
           fnma *= i;
@@ -359,6 +353,7 @@ export class KernelWgpu implements IKernel {
     }
 
     this.Ynm = new Float32Array(2 * core.numExpansion2);
+    console.log(Ynm);
     for (let m = 0; m < core.numExpansions; m++) {
       for (let n = m; n < core.numExpansions; n++) {
         const npm = n * n + n + m;
@@ -385,6 +380,7 @@ export class KernelWgpu implements IKernel {
       }
     }
     await Tester.VerifyFloatBuffer("data-hostDnm.bin", this.Dnm);
+    await Tester.VerifyFloatBuffer("data-hostYnm.bin", this.Ynm);
 
     this.ynmBufferGPU = this.device.createBuffer({
       size: this.Ynm.byteLength,
@@ -629,7 +625,7 @@ export class KernelWgpu implements IKernel {
     await this.RunCompute("m2m",
       [this.uniformBufferGPU, this.mnmBufferGPU, this.commandBufferGPU,
       this.ynmBufferGPU, this.dnmBufferGPU],
-      numBoxIndexOld / boxPerGroup, 
+      numBoxIndexOld / boxPerGroup,
       this.mnmBufferGPU
     );
 
@@ -644,6 +640,26 @@ export class KernelWgpu implements IKernel {
           MnmVec[j] = tempReadBuffer[i * this.core.numCoefficients * 2 + j];
         }
         this.Mnm[i] = MnmVec;
+      }
+      // temp
+      {
+        const rawData = await (await fetch("data-m2m-hostMnmTarget.bin")).arrayBuffer();
+        const expect = new Float32Array(rawData);
+        const expectStart = 0;
+        const resultStart = 512 * 55 * 2;
+        const length = 110;
+        const max_error = 0.001;
+        const errors = [];
+        for (let i = 0; i < length; i++) {
+          const r = CompareNumber(expect[expectStart + i], tempReadBuffer[resultStart + i], max_error);
+          if (!r) {
+            let e = { i: i, expect: expect[expectStart + i], got: tempReadBuffer[resultStart + i], error: 0 };
+            e.error = e.expect - e.got;
+            errors.push(e);
+          }
+        }
+        console.log(errors);
+        throw "pause";
       }
       this.readBufferGPU.unmap();
       console.log(this.Mnm)
@@ -689,4 +705,9 @@ export class KernelWgpu implements IKernel {
       await this.device.queue.onSubmittedWorkDone();
     }
   }
+}
+
+
+function CompareNumber(a: number, b: number, delta = 0.002) {
+  return Math.abs(a - b) < delta
 }
