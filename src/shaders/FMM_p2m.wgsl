@@ -152,7 +152,7 @@ fn p2m(@builtin(local_invocation_id) local_id : vec3<u32>, @builtin(workgroup_id
       }
     }
 
-    //workgroupBarrier();
+    workgroupBarrier();
   }//end of particle loop
 
   {

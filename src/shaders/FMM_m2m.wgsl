@@ -20,8 +20,8 @@ struct Uniforms {
 @group(0) @binding(2) var<storage, read_write> command: array<i32>;
 @group(0) @binding(3) var<storage, read_write> Ynm: array<f32>;
 @group(0) @binding(4) var<storage, read_write> Dnm: array<f32>;
-// @group(0) @binding(5) var<storage, read_write> ng: array<i32>;
-// @group(0) @binding(6) var<storage, read_write> mg: array<i32>;
+@group(0) @binding(5) var<storage, read_write> resultBuffer: array<f32>;
+
 
 
 
@@ -38,11 +38,13 @@ var<workgroup> sharedMnmSource: array<f32, 2 * threadsPerGroup>;
 fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>, 
        @builtin(workgroup_id) group_id:vec3<u32>)
 {
+  const commandLength = 3;
   let threadId = i32(local_id.x);
-  let boxIndex = group_id.x;
-  let mnmSource = command[boxIndex * 3 + 0];//Mnm index
-  let je =  command[boxIndex * 3 + 1];// result of morton1
-  let mnmTarget =  command[boxIndex * 3 + 2];
+  let groupId = group_id.x;
+  let mnmSource = command[groupId * commandLength + 0];//Mnm index
+  let je =  command[groupId * commandLength + 1];// result of morton1
+  let plainBoxIndex =  command[groupId * commandLength + 2];// 0 - 
+  var debugTemp:vec2f;
 
   const numInteraction = 1u;
   var ng:array<i32,threadsPerGroup>;
@@ -58,8 +60,11 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
   var MnmResult : vec2f;
   var tempTarget : vec2f;
 
+  // debug 14
+  //debugTemp=vec2f(f32(mnmSource),f32(je));
+
   for(var ij = 0u; ij < numInteraction; ij++){
-    let MnmSourceOffset = mnmSource * numCoefficients * 2;
+    let MnmSourceOffset = mnmSource * numCoefficients;
     sharedMnmSource[2 * threadId] = Mnm[2 * (MnmSourceOffset + threadId) ]; 
     sharedMnmSource[2 * threadId + 1] = Mnm[2 * (MnmSourceOffset + threadId) + 1];
     workgroupBarrier();
@@ -69,8 +74,7 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
       let n = ng[local_id.x];
       let m = mg[local_id.x];
       let nms = n * (n + 1) / 2 + m;
-      // for (i = 0; i < 2; i++)
-      //   tempTarget[i] = 0;
+      // debug 00 nms // OK!
       for (var k = -n; k < 0; k++)
       {
         let nks = n * (n + 1) / 2 - k;
@@ -81,7 +85,17 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
         tempTarget.x += DnmImag * sharedMnmSource[2 * nks + 1];
         tempTarget.y -= DnmReal * sharedMnmSource[2 * nks + 1];
         tempTarget.y += DnmImag * sharedMnmSource[2 * nks + 0];
+        // debug 02 
+        //if(k==-n){debugTemp=vec2f(DnmReal,DnmImag);}
+        // debug 12
+        //if(k==-n){debugTemp=tempTarget;}
+        // debug 13
+        //if(k==-n){debugTemp=vec2f(sharedMnmSource[2 * nks + 0],sharedMnmSource[2 * nks + 1]);}
       }
+      // debug 01 tempTarget //OK!
+      //debugTemp=tempTarget;
+      // debug03 
+      //debugTemp=vec2f(f32(je),f32(n));
       for (var k = 0; k <= n; k++)
       {
         let nks = n * (n + 1) / 2 + k;
@@ -94,8 +108,12 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
         tempTarget.y += DnmImag * sharedMnmSource[2 * nks + 0];
       }
       workgroupBarrier();
+      //debug 04 tempTarget // OK?
+      //debugTemp=tempTarget;
+      
       sharedMnmSource[2 * nms ] = tempTarget.x;
       sharedMnmSource[2 * nms + 1] = tempTarget.y;
+
     }
     workgroupBarrier();
     {
@@ -122,18 +140,29 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
         for (var i = 0; i < n; i++){fnpm = fnpm * f32(i + 1);}
         let ajn = oddeven(n) / fnpm;
         let sr = oddeven(n) * ank * ajn / ajk;
-        let CnmReal = sr * Ynm[jnk*2] * rhon; // carefully
+        let CnmReal = sr * Ynm[jnk*2] * rhon;
         let CnmImag = sr * Ynm[jnk*2+1] * rhon;
+        // debug06 //OK!
+        // if(n==0){debugTemp=vec2f(CnmReal,CnmImag);}
+        // debug07 //OK!
+        // if(n==0){debugTemp=vec2f(f32(jnk),Ynm[jnk*2]);}
         tempTarget.x += sharedMnmSource[2 * nks + 0] * CnmReal;
         tempTarget.x -= sharedMnmSource[2 * nks + 1] * CnmImag;
         tempTarget.y += sharedMnmSource[2 * nks + 0] * CnmImag;
         tempTarget.y += sharedMnmSource[2 * nks + 1] * CnmReal;
         rhon *= rho;
+        // debug08 //OK?
+        //if(n==0){debugTemp=tempTarget;}
+        //debug09 //OK?  2* 0.001error
+        //if(n==1){debugTemp=tempTarget;}
       }
       workgroupBarrier();
+      //debug 05 tempTarget //OK  8* 0.001 error
+      // debugTemp=tempTarget;
       sharedMnmSource[2 * jks ] = tempTarget.x;
       sharedMnmSource[2 * jks + 1] = tempTarget.y;
     }
+
     workgroupBarrier();
     {
       let jbase = (je + numRelativeBox - 1) * DnmSize;
@@ -164,18 +193,20 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
         tempTarget.y += DnmImag * sharedMnmSource[2 * nks + 0];
       }
     }
+    //debug 10 tempTarget //OK 2* 0.001 error
+    debugTemp=tempTarget;
    MnmResult += tempTarget;
    workgroupBarrier();
   }
-  for(var x=0;x<=8;x++){
-    if(threadId%8==x){
-      let mnmTargetOffset = mnmTarget * numCoefficients * 2 + threadId;
-      Mnm[mnmTargetOffset*2] += MnmResult.x;
-      Mnm[mnmTargetOffset*2+1] += MnmResult.y;
-    }
-    workgroupBarrier();
+  //debug 11 
+  //debugTemp=MnmResult;
+  if(threadId<numCoefficients){
+    let smallBoxIndex = plainBoxIndex % 8;
+    let targetBoxIndex = plainBoxIndex / 8;
+    let targetIndex = targetBoxIndex * numCoefficients *2 *8
+                    + threadId * 8 *2
+                    + smallBoxIndex;
+    resultBuffer[targetIndex]=MnmResult.x;
+    resultBuffer[targetIndex + 8]=MnmResult.y;
   }
-
-  // debug
-  //Mnm[boxIndex]=f32(mnmTarget);
 }

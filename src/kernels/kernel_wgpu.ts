@@ -4,6 +4,7 @@ import wgsl_m2m from '../shaders/FMM_m2m.wgsl';
 // import wgsl_m2l from '../shaders/FMM_m2l.wgsl';
 // import wgsl_l2l from '../shaders/FMM_l2l.wgsl';
 // import wgsl_l2p from '../shaders/FMM_l2p.wgsl';
+import wgsl_buffer_sum from '../shaders/buffer_sum.wgsl';
 
 
 import { IKernel } from './kernel';
@@ -125,8 +126,9 @@ export class KernelWgpu implements IKernel {
       p2p: wgsl_p2p,
       p2m: wgsl_p2m,
       m2m: wgsl_m2m,
+      sum: wgsl_buffer_sum,
     }
-    const nameList = "p2p p2m m2m".split(" ");
+    const nameList = "p2p p2m m2m sum".split(" ");
     for (const n of nameList) {
       this.shaders[n] = this.device.createShaderModule({
         code: this.shaders[n],
@@ -353,7 +355,6 @@ export class KernelWgpu implements IKernel {
     }
 
     this.Ynm = new Float32Array(2 * core.numExpansion2);
-    console.log(Ynm);
     for (let m = 0; m < core.numExpansions; m++) {
       for (let n = m; n < core.numExpansions; n++) {
         const npm = n * n + n + m;
@@ -512,7 +513,7 @@ export class KernelWgpu implements IKernel {
     //console.log(cmdBuffer); throw "pause";
     await this.RunCompute("p2p",
       [this.uniformBufferGPU, this.particleBufferGPU, this.resultBufferGPU, this.commandBufferGPU, this.particleOffsetGPU],
-      this.maxWorkgroupCount, this.resultBufferGPU
+      this.maxWorkgroupCount, this.resultBufferGPU, [this.resultBufferGPU]
     );
     //console.log("applyaccel");
     await this.readBufferGPU.mapAsync(GPUMapMode.READ);
@@ -597,35 +598,113 @@ export class KernelWgpu implements IKernel {
   async m2m(numBoxIndex: number, numBoxIndexOld: number, numLevel: number) {
     const core = this.core;
     let command = new Int32Array(numBoxIndexOld * 3);
-    const boxPerGroup = 4;
+    const boxPerGroup = 1;
+    const commandLength = 3;
+
+    let command_sum = new Int32Array(1 << 3 * numLevel);
 
     for (let jj = 0; jj < numBoxIndexOld; jj++) {
       let jb = jj + core.levelOffset[numLevel];
       let nfjp = Math.trunc(core.boxIndexFull[jb] / 8);
       let nfjc = core.boxIndexFull[jb] % 8;
-      let ib = core.boxIndexMask[nfjp] + core.levelOffset[numLevel - 1];
+      let ib = core.boxIndexMask[nfjp] + core.levelOffset[numLevel - 1];// MnmIndex
       let boxIndex3D = core.unmorton(nfjc);
       boxIndex3D.x = 4 - boxIndex3D.x * 2;
       boxIndex3D.y = 4 - boxIndex3D.y * 2;
       boxIndex3D.z = 4 - boxIndex3D.z * 2;
       let je = core.morton1(boxIndex3D, 3);
-      command[jj * 3 + 0] = jb;//Mnm index
-      command[jj * 3 + 1] = je;
-      command[jj * 3 + 2] = ib;//target index
-      //console.log(ib)
+      command[jj * commandLength + 0] = jb;//Mnm index
+      command[jj * commandLength + 1] = je + 1;
+      command[jj * commandLength + 2] = core.boxIndexFull[jb];//to-do: check for empty box or more level 
+      //command[jj * commandLength + 3] = ib;
+      //console.log(command[jj * 3 + 2])
+      command_sum[nfjp] = ib;
     }
+    //console.log(command)
+    //console.log(command_sum)
 
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, numBoxIndexOld * 3);
-    const boxSize = this.core.rootBoxSize / (1 << this.core.maxLevel);
+    const boxSize = this.core.rootBoxSize / (1 << numLevel);
 
     const uniformBuffer = new Float32Array(1);
     uniformBuffer[0] = boxSize;
     this.device.queue.writeBuffer(this.uniformBufferGPU, 0, uniformBuffer);
 
-    await this.RunCompute("m2m",
+    if (this.resultBufferGPU.size < (1 << 3 * numLevel) * 8 * this.core.numCoefficients * 2 * SIZEOF_32) {
+      throw "resultBufferGPU < numBoxIndexOld * numCoefficients * 2";
+    }
+    this.RunCompute("m2m",
       [this.uniformBufferGPU, this.mnmBufferGPU, this.commandBufferGPU,
-      this.ynmBufferGPU, this.dnmBufferGPU],
-      numBoxIndexOld / boxPerGroup,
+      this.ynmBufferGPU, this.dnmBufferGPU, this.resultBufferGPU],
+      numBoxIndexOld / boxPerGroup, this.resultBufferGPU, [this.resultBufferGPU]
+    );
+
+    if (this.debug) {
+      // {
+      //   const fn = "data-m2m-debug11.bin";
+      //   const rawData = await (await fetch(fn)).arrayBuffer();
+      //   const expect = new Float32Array(rawData);
+      //   let result = [];
+      //   for (let i = 0; i < 10; i++) {
+      //     let re = 0; let re_parts = [];
+
+      //     for (let j = 0; j < 8; j++) {
+      //       let offset = 64 * j + i;
+      //       re += expect[offset * 2];
+      //       re_parts.push(expect[offset * 2]);
+      //       //im += expect[offset * 2 + 1];
+      //     }
+      //     result.push({ v: re, parts: re_parts });
+      //   }
+      //   console.log(result)
+      //   console.log(expect)
+
+      // }
+
+      // await this.readBufferGPU.mapAsync(GPUMapMode.READ);
+      // const handle = this.readBufferGPU.getMappedRange();
+      // let tempReadBuffer = new Float32Array(handle);
+      // console.log(tempReadBuffer);
+      // {
+      //   const fn = "data-m2m-debug10.bin";
+      //   const rawData = await (await fetch(fn)).arrayBuffer();
+      //   const expect = new Float32Array(rawData);
+      //   const expectStart = 0;
+      //   const resultStart = 0;
+      //   const vectorIndex = 3;
+      //   const length = 110;
+      //   const max_error = 0.001;
+      //   const errors = [];
+      //   for (let i = 0; i < length; i++) {
+      //     const n1 = expect[expectStart + i + vectorIndex * 128];
+      //     const n2 = tempReadBuffer[resultStart + i + vectorIndex * 110];
+      //     const r = CompareNumber(n1, n2, max_error);
+      //     if (!r) {
+      //       let e = { i: i, expect: n1, got: n2, error: n1 - n2 };
+      //       errors.push(e);
+      //     }
+      //   }
+      //   console.log(fn + " compare errors:");
+      //   console.log(errors);
+      //   //throw "pause";
+      // }
+      // //throw "pause";
+      // this.readBufferGPU.unmap();
+
+    }
+    const numThread = numBoxIndexOld / 8 * core.numCoefficients * 2;
+    const uniformBuffer_sum = new Int32Array(5);
+    uniformBuffer_sum[0] = 8; //srcPackSize 
+    uniformBuffer_sum[1] = numThread;
+    uniformBuffer_sum[2] = 1;//commandLength
+    uniformBuffer_sum[3] = 0;//commandTarget
+    uniformBuffer_sum[4] = core.numCoefficients * 2;//vectorLength 
+    this.device.queue.writeBuffer(this.uniformBufferGPU, 0, uniformBuffer_sum);
+    const numGroup = Math.ceil(numThread / 256);
+    this.device.queue.writeBuffer(this.commandBufferGPU, 0, command_sum);
+    await this.RunCompute("sum",
+      [this.uniformBufferGPU, this.resultBufferGPU, this.mnmBufferGPU, this.commandBufferGPU],
+      numGroup,
       this.mnmBufferGPU
     );
 
@@ -641,35 +720,44 @@ export class KernelWgpu implements IKernel {
         }
         this.Mnm[i] = MnmVec;
       }
-      // temp
-      {
-        const rawData = await (await fetch("data-m2m-hostMnmTarget.bin")).arrayBuffer();
-        const expect = new Float32Array(rawData);
-        const expectStart = 0;
-        const resultStart = 512 * 55 * 2;
-        const length = 110;
-        const max_error = 0.001;
-        const errors = [];
-        for (let i = 0; i < length; i++) {
-          const r = CompareNumber(expect[expectStart + i], tempReadBuffer[resultStart + i], max_error);
-          if (!r) {
-            let e = { i: i, expect: expect[expectStart + i], got: tempReadBuffer[resultStart + i], error: 0 };
-            e.error = e.expect - e.got;
-            errors.push(e);
-          }
-        }
-        console.log(errors);
-        throw "pause";
-      }
       this.readBufferGPU.unmap();
-      console.log(this.Mnm)
+      // const expectMnmSource = await (async () => {
+      //   const r = [];
+      //   const fn = "data-hostMnmSource.bin";
+      //   const rawData = await (await fetch(fn)).arrayBuffer();
+      //   const a = new Float32Array(rawData);
+      //   for (let i = 0; i < this.core.numBoxIndexTotal; i++) {
+      //     const MnmVec = new Float32Array(this.core.numCoefficients * 2);
+      //     for (let j = 0; j < this.core.numCoefficients * 2; j++) {
+      //       MnmVec[j] = a[i * this.core.numCoefficients * 2 + j];
+      //     }
+      //     r.push(MnmVec);
+      //   }
+      //   return r;
+      // })();
+      // const a = this.Mnm[1];
+      // const b = expectMnmSource[1];
+      // const errors = [];
+
+      // for (let i = 0; i < a.length; i++) {
+      //   const n1 = a[i], n2 = b[i];
+      //   const r = CompareNumber(a[i], b[i]);
+      //   if (!r) {
+      //     let e = { i: i, expect: n1, got: n2, error: n1 - n2 };
+      //     errors.push(e);
+      //   }
+      // }
+      // console.log("Mnm source chekc:");
+      // console.log(errors);
+      // console.log("Mnm:")
+      // console.log(this.Mnm);
     }
   }
   async m2l(numBoxIndex: number, numLevel: number) { }
   async l2l(numBoxIndex: number, numLevel: number) { }
   async l2p(numBoxIndex: number) { }
 
-  async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>, workgroupCount = 1, readBuffer: GPUBuffer = null) {
+  async RunCompute(entryPoint: string, buffers: Array<GPUBuffer>, workgroupCount = 1, readBuffer: GPUBuffer = null, buffersToClear: Array<GPUBuffer> = null) {
     const shaderModule = this.shaders[entryPoint];
     const computePipeline = this.device.createComputePipeline({
       layout: 'auto', // infer from shader code.
@@ -689,7 +777,12 @@ export class KernelWgpu implements IKernel {
       entries: entries
     });
     const commandEncoder = this.device.createCommandEncoder();
-    commandEncoder.clearBuffer(this.resultBufferGPU);
+    if (buffersToClear) {
+      for (const b of buffersToClear) {
+        commandEncoder.clearBuffer(b);
+      }
+    }
+
     const computePassEncoder = commandEncoder.beginComputePass();
     computePassEncoder.setPipeline(computePipeline);
     computePassEncoder.setBindGroup(0, bindGroup);
