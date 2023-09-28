@@ -1,6 +1,7 @@
 import { NodeLinkRenderer } from './NodeLinkRenderer';
 
 import { GetNodes, GetLinks } from './diagrams/BinaryLoader'
+////import { GetNodes, GetLinks,GetNodeColors } from './diagrams/MatrixMarketLoader'
 
 import { FMMSolver } from './FMMSolver';
 
@@ -32,7 +33,7 @@ async function main() {
 
 
     // const renderer = new NodeLinkRenderer();
-    // renderer.setData(nodes, links, null);
+    // renderer.setData(nodes, links, colors);
     // await renderer.init(canvas);
 
 }
