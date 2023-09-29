@@ -54,7 +54,10 @@ export class Tester {
                 let numBoxIndexOld = numBoxIndex;
                 numBoxIndex = instance.getBoxDataOfParent(numBoxIndex, numLevel);
                 console.log(`numBoxIndexOld: ${numBoxIndexOld}| numBoxIndex: ${numBoxIndex}`)
+                let time_m2m = performance.now();
                 await instance.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
+                time_m2m = performance.now() - time_m2m;
+                console.log(`time m2m: ${time_m2m.toFixed(2)} ms`);
             }
             numLevel = 2;
         }
