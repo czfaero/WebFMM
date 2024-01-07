@@ -77,19 +77,19 @@ export class Tester {
                 console.log(`level ${numLevel} : l2l m2l`);
                 numBoxIndex = instance.levelOffset[numLevel - 2] - instance.levelOffset[numLevel - 1];
 
-                instance.kernel.l2l(numBoxIndex, numLevel);
+                await instance.kernel.l2l(numBoxIndex, numLevel);
 
                 instance.getBoxIndexMask(numBoxIndex, numLevel);
 
                 instance.getInteractionListM2LLower(numBoxIndex, numLevel);
 
-                instance.kernel.m2l(numBoxIndex, numLevel);
+                await instance.kernel.m2l(numBoxIndex, numLevel);
             }
             numLevel = instance.maxLevel;
             await VerifyFloatBuffer2("data-l2l.bin", instance.kernel.Lnm, numBoxIndex);
         }
 
-        instance.kernel.l2p(numBoxIndex);
+        await instance.kernel.l2p(numBoxIndex);
         await VerifyFloatBuffer("data-l2p.bin", instance.kernel.accelBuffer, 0.05);
     }
     static async VerifyFloatBuffer(name: string, data: Float32Array, max_error = 0.001) {
