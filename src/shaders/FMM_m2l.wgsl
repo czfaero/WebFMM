@@ -19,8 +19,8 @@ struct Uniforms {
 @group(0) @binding(0) var<uniform> uniforms : Uniforms;
 @group(0) @binding(1) var<storage, read_write> Mnm: array<f32>;
 @group(0) @binding(2) var<storage, read_write> command: array<i32>;
-@group(0) @binding(4) var<storage, read_write> Dnm: array<f32>;
-@group(0) @binding(5) var<storage, read_write> Lnm: array<f32>;
+@group(0) @binding(3) var<storage, read_write> Dnm: array<f32>;
+@group(0) @binding(4) var<storage, read_write> Lnm: array<f32>;
 
 
 fn unmorton1(je:i32)-> vec3f
@@ -172,8 +172,8 @@ fn m2l(@builtin(local_invocation_id) local_id : vec3<u32>,
         for (var i = 0; i < j + n; i++){fnpm = fnpm * f32(i + 1);}
         let ajn = oddeven(j + n) / fnpm;
         let sr = oddeven(j + k) * ank * ajk / ajn;
-        let CnmReal = sr * rhon;
-        let CnmImag = sr * rhon;
+        let CnmReal = sr * rhon;//* Ynm
+        let CnmImag = 0f;//sr * rhon *Ynm;
 
         tempTarget.x += sharedMnmSource[2 * nks + 0] * CnmReal;
         tempTarget.x -= sharedMnmSource[2 * nks + 1] * CnmImag;

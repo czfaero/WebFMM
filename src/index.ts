@@ -17,14 +17,11 @@ async function main() {
     const nodes = await GetNodes(1e5);
     const links = await GetLinks();
 
-    const tester = new Tester();
+    //const tester = new Tester();
 
     const solver = new FMMSolver(nodes, "wgpu");
-    try {
-       await tester.Test(solver);
-    } catch (e) {
-       console.log("stop: " + e)
-    }
+    solver.kernel.debug = true;
+    solver.main();
 
     // const solver2 = new FMMSolver(nodes, "ts");
     // try {
@@ -32,9 +29,11 @@ async function main() {
     // } catch (e) { throw e; }
 
 
-    // const renderer = new NodeLinkRenderer();
-    // renderer.setData(nodes, links, colors);
-    // await renderer.init(canvas);
+    const renderer = new NodeLinkRenderer();
+    const colors = new Float32Array(nodes.length);
+    colors.fill(1);
+    renderer.setData(nodes, links, colors);
+    await renderer.init(canvas);
 
 }
 main();

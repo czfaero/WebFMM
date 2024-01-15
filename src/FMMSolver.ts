@@ -456,7 +456,7 @@ export class FMMSolver {
             for (numLevel = this.maxLevel - 1; numLevel >= 2; numLevel--) {
                 let numBoxIndexOld = numBoxIndex;
                 numBoxIndex = this.getBoxDataOfParent(numBoxIndex, numLevel);
-                this.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
+                await this.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
             }
             numLevel = 2;
         }
@@ -464,7 +464,7 @@ export class FMMSolver {
             this.getBoxIndexMask(numBoxIndex, numLevel);
         }
         this.getInteractionListM2L(numBoxIndex, numLevel);
-        this.kernel.m2l(numBoxIndex, numLevel);
+        await this.kernel.m2l(numBoxIndex, numLevel);
 
         if (this.maxLevel > 2) {
 
@@ -472,18 +472,18 @@ export class FMMSolver {
 
                 numBoxIndex = this.levelOffset[numLevel - 2] - this.levelOffset[numLevel - 1];
 
-                this.kernel.l2l(numBoxIndex, numLevel);
+                await this.kernel.l2l(numBoxIndex, numLevel);
 
                 this.getBoxIndexMask(numBoxIndex, numLevel);
 
                 this.getInteractionListM2LLower(numBoxIndex, numLevel);
 
-                this.kernel.m2l(numBoxIndex, numLevel);
+                await this.kernel.m2l(numBoxIndex, numLevel);
             }
             numLevel = this.maxLevel;
         }
 
-        this.kernel.l2p(numBoxIndex);
+        await this.kernel.l2p(numBoxIndex);
 
     }
     numExpansions: number;

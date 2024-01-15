@@ -18,9 +18,8 @@ struct Uniforms {
 @group(0) @binding(0) var<uniform> uniforms : Uniforms;
 @group(0) @binding(1) var<storage, read_write> Lnm: array<f32>;
 @group(0) @binding(2) var<storage, read_write> command: array<i32>;
-@group(0) @binding(3) var<storage, read_write> Ynm: array<f32>;
-@group(0) @binding(4) var<storage, read_write> Dnm: array<f32>;
-@group(0) @binding(5) var<storage, read_write> LnmOld: array<f32>;
+@group(0) @binding(3) var<storage, read_write> Dnm: array<f32>;
+@group(0) @binding(4) var<storage, read_write> LnmOld: array<f32>;
 
 
 
@@ -46,6 +45,7 @@ fn l2l(@builtin(local_invocation_id) local_id : vec3<u32>,
 
   var debugTemp:vec2f;
 
+
   const numInteraction = 1u;
   var ng:array<i32,threadsPerGroup>;
   var mg:array<i32,threadsPerGroup>;
@@ -60,11 +60,13 @@ fn l2l(@builtin(local_invocation_id) local_id : vec3<u32>,
   var LnmResult : vec2f;
   var tempTarget : vec2f;
 
+   debugTemp=vec2f(f32(threadId),f32(lnmSource));
 
   for(var ij = 0u; ij < numInteraction; ij++){
     let LnmSourceOffset=lnmSource*numCoefficients;
     sharedLnmSource[2 * threadId] = LnmOld[2 * (LnmSourceOffset + threadId) ]; 
     sharedLnmSource[2 * threadId + 1] = LnmOld[2 * (LnmSourceOffset + threadId) + 1];
+   
     workgroupBarrier();
     let rho = uniforms.boxSize * sqrt(3.0) / 4;
     {
@@ -128,8 +130,8 @@ fn l2l(@builtin(local_invocation_id) local_id : vec3<u32>,
         for (var i = 0; i < n-j; i++){fnpm = fnpm * f32(i + 1);}
         let ajn = oddeven(n-j) / fnpm;
         let sr = ank * ajn / ajk;
-        let CnmReal = sr * Ynm[jnk*2] * rhon;
-        let CnmImag = sr * Ynm[jnk*2+1] * rhon;
+        let CnmReal = sr * rhon; // *Ynm
+        let CnmImag = 0f; //sr * rhon;
 
         tempTarget.x += sharedLnmSource[2 * nks + 0] * CnmReal;
         tempTarget.x -= sharedLnmSource[2 * nks + 1] * CnmImag;

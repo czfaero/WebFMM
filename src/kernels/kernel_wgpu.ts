@@ -209,8 +209,8 @@ export class KernelWgpu implements IKernel {
     const Yn0 = new Float32Array(2 * core.numExpansions);
     let p0 = 1;
     let p1 = 1;
-    Yn0[0]=p0;
-    Yn0[1]=p1;
+    Yn0[0] = p0;
+    Yn0[1] = p1;
     for (let n = 1; n < 2 * core.numExpansions; n++) {
       let p = ((2 * n + 1) * p1 - n * p0) / (n + 1)
       Yn0[n + 1] = p;
@@ -235,13 +235,13 @@ export class KernelWgpu implements IKernel {
         let p2 = p1;
         p1 = p;
         p = ((2 * n + 1) * p1 - (n + m) * p2) / (n - m + 1);
-        console.log(`${(2 * n + 1) * p1 - (n + m) * p2}/${n - m + 1}`)
+        //console.log(`${(2 * n + 1) * p1 - (n + m) * p2}/${n - m + 1}`)
       }
       pn = 0;
     }
-    console.log("Ynm")
-    console.log(Yn0)
-    console.log(Ynm)
+    // console.log("Ynm")
+    // console.log(Yn0)
+    // console.log(Ynm)
 
     for (let n = 0; n < core.numExpansions; n++) {
       for (let m = 1; m <= n; m++) {
@@ -425,7 +425,7 @@ export class KernelWgpu implements IKernel {
         }
       }
     }
-    await Tester.VerifyFloatBuffer("data-hostDnm.bin", this.Dnm);
+    //await Tester.VerifyFloatBuffer("data-hostDnm.bin", this.Dnm);
     //await Tester.VerifyFloatBuffer("data-hostYnm.bin", this.Ynm);
 
 
@@ -464,7 +464,7 @@ export class KernelWgpu implements IKernel {
     // this.device.queue.writeBuffer(this.mgBufferGPU, 0, mg);
   }
   Dnm: Float32Array;
- // Ynm: Float32Array;
+  // Ynm: Float32Array;
   async p2p(numBoxIndex: number, interactionList: any, numInteraction: any, particleOffset: any) {
     if (this.debug) {
       this.debug_p2p_call_count = 0;
@@ -520,7 +520,9 @@ export class KernelWgpu implements IKernel {
 
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, commandCount * 2);
     await this.p2p_ApplyAccel(command, commandCount);
-    this.debug_info["events"].push({ time: performance.now(), tag: "end" });
+    if (this.debug) {
+      this.debug_info["events"].push({ time: performance.now(), tag: "end" });
+    }
 
     if (this.debug) {
       // await this.readBufferGPU.mapAsync(GPUMapMode.READ);
@@ -618,6 +620,7 @@ export class KernelWgpu implements IKernel {
     );
 
     if (this.debug) {
+      console.log("debug p2m");
       await this.readBufferGPU.mapAsync(GPUMapMode.READ);
       const handle = this.readBufferGPU.getMappedRange();
       let tempReadBuffer = new Float32Array(handle);
@@ -630,6 +633,7 @@ export class KernelWgpu implements IKernel {
         this.Mnm[i] = MnmVec;
       }
       this.readBufferGPU.unmap();
+      //console.log(this.Mnm)
     }
 
   }
@@ -674,61 +678,12 @@ export class KernelWgpu implements IKernel {
     }
     this.RunCompute("m2m",
       [this.uniformBufferGPU, this.mnmBufferGPU, this.commandBufferGPU
-      , this.dnmBufferGPU, this.resultBufferGPU],
+        , this.dnmBufferGPU, this.resultBufferGPU],
       numBoxIndexOld / boxPerGroup, this.resultBufferGPU, [this.resultBufferGPU]
     );
 
     if (this.debug) {
-      // {
-      //   const fn = "data-m2m-debug11.bin";
-      //   const rawData = await (await fetch(fn)).arrayBuffer();
-      //   const expect = new Float32Array(rawData);
-      //   let result = [];
-      //   for (let i = 0; i < 10; i++) {
-      //     let re = 0; let re_parts = [];
 
-      //     for (let j = 0; j < 8; j++) {
-      //       let offset = 64 * j + i;
-      //       re += expect[offset * 2];
-      //       re_parts.push(expect[offset * 2]);
-      //       //im += expect[offset * 2 + 1];
-      //     }
-      //     result.push({ v: re, parts: re_parts });
-      //   }
-      //   console.log(result)
-      //   console.log(expect)
-
-      // }
-
-      // await this.readBufferGPU.mapAsync(GPUMapMode.READ);
-      // const handle = this.readBufferGPU.getMappedRange();
-      // let tempReadBuffer = new Float32Array(handle);
-      // console.log(tempReadBuffer);
-      // {
-      //   const fn = "data-m2m-debug10.bin";
-      //   const rawData = await (await fetch(fn)).arrayBuffer();
-      //   const expect = new Float32Array(rawData);
-      //   const expectStart = 0;
-      //   const resultStart = 0;
-      //   const vectorIndex = 3;
-      //   const length = 110;
-      //   const max_error = 0.001;
-      //   const errors = [];
-      //   for (let i = 0; i < length; i++) {
-      //     const n1 = expect[expectStart + i + vectorIndex * 128];
-      //     const n2 = tempReadBuffer[resultStart + i + vectorIndex * 110];
-      //     const r = CompareNumber(n1, n2, max_error);
-      //     if (!r) {
-      //       let e = { i: i, expect: n1, got: n2, error: n1 - n2 };
-      //       errors.push(e);
-      //     }
-      //   }
-      //   console.log(fn + " compare errors:");
-      //   console.log(errors);
-      //   //throw "pause";
-      // }
-      // //throw "pause";
-      // this.readBufferGPU.unmap();
 
     }
     const numThread = numBoxIndexOld / 8 * core.numCoefficients * 2;
@@ -748,6 +703,7 @@ export class KernelWgpu implements IKernel {
     );
 
     if (this.debug) {
+      console.log("debug m2m")
       await this.readBufferGPU.mapAsync(GPUMapMode.READ);
       const handle = this.readBufferGPU.getMappedRange();
       let tempReadBuffer = new Float32Array(handle);
@@ -761,37 +717,8 @@ export class KernelWgpu implements IKernel {
       }
       this.readBufferGPU.unmap();
       console.log("Mnm:")
-      console.log(this.Mnm);
-      // const expectMnmSource = await (async () => {
-      //   const r = [];
-      //   const fn = "data-hostMnmSource.bin";
-      //   const rawData = await (await fetch(fn)).arrayBuffer();
-      //   const a = new Float32Array(rawData);
-      //   for (let i = 0; i < this.core.numBoxIndexTotal; i++) {
-      //     const MnmVec = new Float32Array(this.core.numCoefficients * 2);
-      //     for (let j = 0; j < this.core.numCoefficients * 2; j++) {
-      //       MnmVec[j] = a[i * this.core.numCoefficients * 2 + j];
-      //     }
-      //     r.push(MnmVec);
-      //   }
-      //   return r;
-      // })();
-      // const a = this.Mnm[1];
-      // const b = expectMnmSource[1];
-      // const errors = [];
-
-      // for (let i = 0; i < a.length; i++) {
-      //   const n1 = a[i], n2 = b[i];
-      //   const r = CompareNumber(a[i], b[i]);
-      //   if (!r) {
-      //     let e = { i: i, expect: n1, got: n2, error: n1 - n2 };
-      //     errors.push(e);
-      //   }
-      // }
-      // console.log("Mnm source chekc:");
-      // console.log(errors);
-      // console.log("Mnm:")
-      // console.log(this.Mnm);
+      //console.log(this.Mnm);
+      //throw "pause after m2m";
     }
   }
   async m2l(numBoxIndex: number, numLevel: number) {
@@ -821,8 +748,8 @@ export class KernelWgpu implements IKernel {
 
       }
     }
-    console.log("m2l command:");
-    console.log(command);
+    // console.log("m2l command:");
+    // console.log(command);
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0);
 
     const boxSize = this.core.rootBoxSize / (1 << numLevel);
@@ -832,10 +759,11 @@ export class KernelWgpu implements IKernel {
     this.device.queue.writeBuffer(this.uniformBufferGPU, 0, uniformBuffer);
     this.RunCompute("m2l",
       [this.uniformBufferGPU, this.mnmBufferGPU, this.commandBufferGPU
-      , this.dnmBufferGPU, this.lnmBufferGPU],
+        , this.dnmBufferGPU, this.lnmBufferGPU],
       numBoxIndex, this.lnmBufferGPU
     );
     if (this.debug) {
+      console.log("debug m2l")
       {
         await this.readBufferGPU.mapAsync(GPUMapMode.READ);
         const handle = this.readBufferGPU.getMappedRange();
@@ -854,47 +782,16 @@ export class KernelWgpu implements IKernel {
         console.log(this.Lnm);
         this.readBufferGPU.unmap();
       }
-      // {
-      //   //const fn = "data-m2l-hostMnmSource.bin";
-      //   const fn = "data-m2l-debug-i2.bin";
-      //   const rawData = await (await fetch(fn)).arrayBuffer();
-      //   const expect = new Float32Array(rawData);
-      //   console.log(expect)
-      // }
-
-      {
-        const fn = "data-m2l-debug16-2.bin";
-        const rawData = await (await fetch(fn)).arrayBuffer();
-        const expect = new Float32Array(rawData);
-        const vectorIndex = 0;
-        const length = this.Lnm[0].length;
-        const max_error = 0.001;
-        const errors = [];
-        for (let i = 0; i < length; i++) {
-          const n1 = expect[i + vectorIndex * 128];
-          const n2 = this.Lnm[vectorIndex][i];
-          const r = CompareNumber(n1, n2, max_error);
-          if (!r) {
-            let e = { i: i, expect: n1, got: n2, error: n1 - n2 };
-            errors.push(e);
-          }
-        }
-        console.log(fn + " compare errors:");
-        console.log(errors);
-        console.log(expect)
-
-        //throw "pause";
-      }
-
+      //throw "pause after m2l";
     }
 
 
 
   }
   async l2l(numBoxIndex: number, numLevel: number) {
-    console.log("l2l")
+    //console.log("l2l")
     const core = this.core;
-    const commandLength = 2 * maxM2LInteraction + 1;//count, pairs
+    const commandLength = 2 ;
     let command = new Int32Array(commandLength * numBoxIndex);
 
     let nbc = -1, neo = new Array(core.numBoxIndexFull);
@@ -934,6 +831,7 @@ export class KernelWgpu implements IKernel {
       command[ii * commandLength] = ib;
       command[ii * commandLength + 1] = je + 1;
     }
+    this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0);
     const boxSize = core.rootBoxSize / (1 << numLevel);
     const uniformBuffer = new Float32Array(1);
     uniformBuffer[0] = boxSize;
@@ -948,6 +846,29 @@ export class KernelWgpu implements IKernel {
       this.dnmBufferGPU, this.lnmOldBufferGPU],
       numBoxIndex, this.lnmBufferGPU, [], preFunc
     );
+
+    if (this.debug) {
+      console.log("debug l2l")
+      {
+        await this.readBufferGPU.mapAsync(GPUMapMode.READ);
+        const handle = this.readBufferGPU.getMappedRange();
+        let tempReadBuffer = new Float32Array(handle);
+        {
+          this.Lnm = new Array(this.core.numBoxIndexLeaf);
+          for (let i = 0; i < this.core.numBoxIndexTotal; i++) {
+            const LnmVec = new Float32Array(this.core.numCoefficients * 2);
+            for (let j = 0; j < this.core.numCoefficients * 2; j++) {
+              LnmVec[j] = tempReadBuffer[i * this.core.numCoefficients * 2 + j];
+            }
+            this.Lnm[i] = LnmVec;
+          }
+        }
+        console.log("Lnm:")
+        console.log(this.Lnm);
+        this.readBufferGPU.unmap();
+      }
+      //throw "pause after l2l";
+    }
 
   }
   async l2p(numBoxIndex: number) {
@@ -971,6 +892,7 @@ export class KernelWgpu implements IKernel {
       }
 
     }
+    this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0);
 
     await this.RunCompute("l2p",
       [this.uniformBufferGPU, this.particleBufferGPU, this.resultBufferGPU, this.commandBufferGPU,
@@ -981,7 +903,8 @@ export class KernelWgpu implements IKernel {
     const handle = this.readBufferGPU.getMappedRange();
     let tempAccelBuffer = new Float32Array(handle);
     // console.log(cmdBuffer);
-    // console.log(tempAccelBuffer);
+    console.log(tempAccelBuffer);
+    console.log(this.accelBuffer);
     for (let i = 0; i < this.particleCount; i++) {
 
       this.accelBuffer[i * 3] += tempAccelBuffer[i * 3];

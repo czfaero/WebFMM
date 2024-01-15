@@ -139,8 +139,8 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
         for (var i = 0; i < n; i++){fnpm = fnpm * f32(i + 1);}
         let ajn = oddeven(n) / fnpm;
         let sr = oddeven(n) * ank * ajn / ajk;
-        let CnmReal = sr  * rhon;
-        let CnmImag = sr  * rhon *0;
+        let CnmReal = sr  * rhon;//*Ynm
+        let CnmImag = 0f;
         // debug06 //OK!
         // if(n==0){debugTemp=vec2f(CnmReal,CnmImag);}
         // debug07 //OK!
