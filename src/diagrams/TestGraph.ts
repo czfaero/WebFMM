@@ -1,4 +1,4 @@
-const count = 1000000;
+const count = 10000;
 export const GetNodes = function () {
     let x = 0, y = 0, z = 0;
     const iterable = (function* () {
@@ -21,9 +21,11 @@ export const GetNodes = function () {
     return nodes;
 }
 export const GetLinks = function () {
-    const links = new Uint32Array([
-
-    ]);
+    const links = new Uint32Array(count * 2);
+    for (let i = 0; i < count; i++) {
+        links[i * 2] = i;
+        links[i * 2 + 1] = (i + 1) % count;
+    }
 
     return links;
 }

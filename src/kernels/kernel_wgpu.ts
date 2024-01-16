@@ -62,6 +62,7 @@ export class KernelWgpu implements IKernel {
   core: FMMSolver;
   debug: boolean;
   particleCount: number;
+  dataReady: boolean;
   constructor(core: FMMSolver) {
     this.debug = false;
     this.core = core;
@@ -91,6 +92,7 @@ export class KernelWgpu implements IKernel {
 
   shaders: any;
   async Init(particleBuffer: Float32Array) {
+    const core = this.core;
     this.particleCount = particleBuffer.length / 4;
     this.accelBuffer = new Float32Array(this.particleCount * 3);
     this.adapter = await navigator.gpu.requestAdapter();
@@ -144,8 +146,14 @@ export class KernelWgpu implements IKernel {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
 
-    this.device.queue.writeBuffer(this.particleBufferGPU, 0, particleBuffer);
+    this.Dnm = new Float32Array(2 * core.DnmSize * 2 * numRelativeBox);
 
+    this.dnmBufferGPU = this.device.createBuffer({
+      size: this.Dnm.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    this.device.queue.writeBuffer(this.particleBufferGPU, 0, particleBuffer);
 
     this.shaders = {
       p2p: wgsl_p2p,
@@ -411,14 +419,12 @@ export class KernelWgpu implements IKernel {
     //   }
     // }
 
-    const DnmSize = (4 * core.numExpansion2 * core.numExpansions - core.numExpansions) / 3;
-    this.Dnm = new Float32Array(2 * DnmSize * 2 * numRelativeBox);
     for (let je = 0; je < 2 * numRelativeBox; je++) {
       for (let n = 0; n < core.numExpansions; n++) {
         for (let m = 0; m <= n; m++) {
           for (let k = -n; k <= n; k++) {
             const nk = n * (n + 1) + k;
-            const nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + je * DnmSize;
+            const nmk = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + m * (2 * n + 1) + k + je * core.DnmSize;
             this.Dnm[2 * nmk + 0] = Dnm[je][m][nk * 2];
             this.Dnm[2 * nmk + 1] = Dnm[je][m][nk * 2 + 1];
           }
@@ -435,10 +441,7 @@ export class KernelWgpu implements IKernel {
     //   size: this.Ynm.byteLength,
     //   usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     // });
-    this.dnmBufferGPU = this.device.createBuffer({
-      size: this.Dnm.byteLength,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
+
     // this.device.queue.writeBuffer(this.ynmBufferGPU, 0, this.Ynm);
     this.device.queue.writeBuffer(this.dnmBufferGPU, 0, this.Dnm);
 
@@ -791,7 +794,7 @@ export class KernelWgpu implements IKernel {
   async l2l(numBoxIndex: number, numLevel: number) {
     //console.log("l2l")
     const core = this.core;
-    const commandLength = 2 ;
+    const commandLength = 2;
     let command = new Int32Array(commandLength * numBoxIndex);
 
     let nbc = -1, neo = new Array(core.numBoxIndexFull);
@@ -903,8 +906,8 @@ export class KernelWgpu implements IKernel {
     const handle = this.readBufferGPU.getMappedRange();
     let tempAccelBuffer = new Float32Array(handle);
     // console.log(cmdBuffer);
-    console.log(tempAccelBuffer);
-    console.log(this.accelBuffer);
+    //console.log(tempAccelBuffer);
+    //console.log(this.accelBuffer);
     for (let i = 0; i < this.particleCount; i++) {
 
       this.accelBuffer[i * 3] += tempAccelBuffer[i * 3];
@@ -912,6 +915,8 @@ export class KernelWgpu implements IKernel {
       this.accelBuffer[i * 3 + 2] += tempAccelBuffer[i * 3 + 2];
     }
     this.readBufferGPU.unmap();
+    //console.log(this.accelBuffer);
+    this.dataReady = true;
 
   }
 
@@ -958,6 +963,23 @@ export class KernelWgpu implements IKernel {
     if (!readBuffer) {
       await this.device.queue.onSubmittedWorkDone();
     }
+  }
+
+  Release() {
+    this.uniformBufferGPU.destroy();
+    this.particleBufferGPU.destroy();
+
+    this.uniformBufferGPU.destroy();
+
+    this.factorialGPU.destroy();
+    this.mnmBufferGPU.destroy();
+    this.lnmBufferGPU.destroy();
+    this.lnmOldBufferGPU.destroy();
+    this.resultBufferGPU.destroy();
+    this.readBufferGPU.destroy();
+
+    this.commandBufferGPU.destroy();
+    this.dnmBufferGPU.destroy();
   }
 }
 

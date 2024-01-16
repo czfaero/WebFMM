@@ -60,12 +60,13 @@ fn l2l(@builtin(local_invocation_id) local_id : vec3<u32>,
   var LnmResult : vec2f;
   var tempTarget : vec2f;
 
-   debugTemp=vec2f(f32(threadId),f32(lnmSource));
+   
 
   for(var ij = 0u; ij < numInteraction; ij++){
     let LnmSourceOffset=lnmSource*numCoefficients;
     sharedLnmSource[2 * threadId] = LnmOld[2 * (LnmSourceOffset + threadId) ]; 
     sharedLnmSource[2 * threadId + 1] = LnmOld[2 * (LnmSourceOffset + threadId) + 1];
+    
    
     workgroupBarrier();
     let rho = uniforms.boxSize * sqrt(3.0) / 4;
@@ -181,6 +182,9 @@ fn l2l(@builtin(local_invocation_id) local_id : vec3<u32>,
   }
 
   if(threadId<numCoefficients){
+
+    //debugTemp=vec2f(sharedLnmSource[2 * threadId],tempTarget.x);
+
     let targetIndex = i32(numCoefficients) * groupId + threadId;
     Lnm[targetIndex*2] = tempTarget.x;
     Lnm[targetIndex*2 +1] = tempTarget.y;

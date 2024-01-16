@@ -10,14 +10,15 @@ struct VertexOutput {
 
 @binding(0) @group(0) var<uniform> uniforms : Uniforms;
 
-const size = 0.5;
+const size = 0.2;
 
 @vertex
 fn main_node_vert(
   @location(0) quadPos : vec2<f32>,
-  @location(1) npos : vec3<f32>,
+  @location(1) node : vec4<f32>,
   @location(2) color : vec3<f32>,
 ) -> VertexOutput {
+  let npos = node.xyz;
   var output : VertexOutput;
   var right = cross(uniforms.cameraDirection, vec3(0,1,0)); //camera x world up
   var up = cross(right, uniforms.cameraDirection); // camera up
@@ -43,7 +44,7 @@ fn main_node_frag(
 
 /// Links
 
-const linkWidth = 0.1;
+const linkWidth = 0.02;
 
 
 @group(0) @binding(1) var<storage> nodes : array<f32>;
@@ -54,8 +55,8 @@ fn main_link_vert(
   @builtin(instance_index) i_index : u32,
 ) -> VertexOutput {
   var output : VertexOutput;
-  let i0 = link.x * 3;
-  let i1 = link.y * 3;
+  let i0 = link.x * 4;
+  let i1 = link.y * 4;
   let node0 = vec3(nodes[i0], nodes[i0+1], nodes[i0+2]);
   let node1 = vec3(nodes[i1], nodes[i1+1], nodes[i1+2]);
 

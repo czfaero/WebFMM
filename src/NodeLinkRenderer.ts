@@ -15,6 +15,12 @@ export class NodeLinkRenderer {
         this.nodeColorBuffer = nodeColors;
     };
 
+    dataUpdate: any;
+
+    setDataUpdate(func: any) {
+        this.dataUpdate = func;
+    }
+
     async init(canvasElement: HTMLCanvasElement) {
         const _ = this;
         const adapter = await navigator.gpu.requestAdapter();
@@ -67,11 +73,6 @@ export class NodeLinkRenderer {
             size: this.nodeBuffer.byteLength,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
-        const nodesBuffer1 = device.createBuffer({
-            size: this.nodeBuffer.byteLength,
-            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE
-        });
-        const nodesBuffers = [nodesBuffer0, nodesBuffer1];
         device.queue.writeBuffer(nodesBuffer0, 0, this.nodeBuffer);
 
 
@@ -131,12 +132,12 @@ export class NodeLinkRenderer {
                     } as GPUVertexBufferLayout,
                     {
                         // instanced particles buffer
-                        arrayStride: 3 * 4,
+                        arrayStride: 4 * 4,
                         stepMode: 'instance',
                         attributes: [
                             {
                                 // instance position
-                                shaderLocation: 1, offset: 0, format: 'float32x3',
+                                shaderLocation: 1, offset: 0, format: 'float32x4',
                             },
                         ],
                     } as GPUVertexBufferLayout,
@@ -345,6 +346,9 @@ export class NodeLinkRenderer {
 
         function Update(time: DOMHighResTimeStamp) {
             UpdateView(time);
+            if (_.dataUpdate) {
+                _.dataUpdate(_.nodeBuffer, _.linkBuffer, nodesBuffer0, gpuLinkBuffer, device);
+            }
             const commandEncoder = device.createCommandEncoder();
 
             // Must create every time, or there would be 'Destroyed texture [Texture] used in a submit.'
@@ -374,14 +378,13 @@ export class NodeLinkRenderer {
             // computePassEncoder.dispatchWorkgroups(3, 1);
             // computePassEncoder.end();
 
-
             const renderPassEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             renderPassEncoder.setPipeline(nodePipeline);
             renderPassEncoder.setBindGroup(0, nodeBindGroup);
             renderPassEncoder.setVertexBuffer(0, quadVertexBuffer);
-            renderPassEncoder.setVertexBuffer(1, nodesBuffers[0]);
+            renderPassEncoder.setVertexBuffer(1, nodesBuffer0);
             renderPassEncoder.setVertexBuffer(2, nodeColorsBuffer);
-            renderPassEncoder.draw(quadVertexData.length / 2, _.nodeBuffer.length / 3, 0, 0);
+            renderPassEncoder.draw(quadVertexData.length / 2, _.nodeBuffer.length / 4, 0, 0);
             renderPassEncoder.setPipeline(linkPipeline);
             renderPassEncoder.setBindGroup(0, linkBindGroup);
             renderPassEncoder.setVertexBuffer(1, gpuLinkBuffer);

@@ -45,7 +45,7 @@ class Complex {
 export class KernelTs implements IKernel {
     debug: boolean;
     core: FMMSolver;
-
+    dataReady: boolean;
     particleBuffer: Float32Array; // vec4
     particleCount: number;
 
@@ -212,7 +212,7 @@ export class KernelTs implements IKernel {
                     let nmk1 = Math.trunc((4 * n * n * n + 6 * n * n + 5 * n) / 3) + n * (2 * n + 1) + k - 1;
                     let ank = (n + k) / (n - k + 1);//double
                     Dnmd[nmk1] = Math.sqrt(ank) * Math.tan(alpha * 0.5) * Dnmd[nmk];
-                    
+
 
                 }
                 for (let m = n; m >= 1; m--) {
@@ -764,5 +764,8 @@ export class KernelTs implements IKernel {
             }
         }
     }
+    Release(){
+        
+    };
 
 }

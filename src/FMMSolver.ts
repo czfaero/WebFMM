@@ -485,6 +485,8 @@ export class FMMSolver {
 
         await this.kernel.l2p(numBoxIndex);
 
+        this.kernel.Release();
+
     }
     numExpansions: number;
     numExpansion2: number;

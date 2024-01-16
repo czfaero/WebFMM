@@ -13,4 +13,6 @@ export interface IKernel {
     l2p: (numBoxIndex: number) => Promise<void>;
     Mnm: Array<Float32Array>;
     Lnm: Array<Float32Array>;
+    dataReady: boolean;
+    Release: () => void;
 }
