@@ -1,16 +1,26 @@
 import { FMMSolver } from './FMMSolver';
+import { DirectSolver } from './DirectSolver';
 
-const k = 1;// spring
-const delta = 0.001;//delta time ^2
+const k = 2;// spring
+const delta = 0.1;//delta time ^2
 
-var solver: FMMSolver;
+var solver: any;
+var next = false;
+const stepMode = false;
+const maxIter = 1000;
+const msg = document.querySelector("#msg") as HTMLSpanElement;
 
 export function DataStart(nodeBuffer: Float32Array,
     linkBuffer: Uint32Array) {
+    let button = document.querySelector("#button_next") as HTMLButtonElement;
+    button.onclick = function () {
+        next = true;
+    }
 
 
-    solver = new FMMSolver(nodeBuffer, "wgpu");
-    solver.main();
+    //solver = new FMMSolver(nodeBuffer, "wgpu");
+    // solver = new DirectSolver(nodeBuffer);
+    // solver.main();
 
 }
 
@@ -29,7 +39,7 @@ function GetDist(p1, p2) {
         z: p2.z - p1.z
     };
 }
-var iterCount = 1;
+var iterCount = 0;
 export function DataUpdate(
     nodeBuffer: Float32Array,
     linkBuffer: Uint32Array,
@@ -39,8 +49,10 @@ export function DataUpdate(
 ) {
 
 
-    if (solver && solver.kernel.dataReady) {
-        const accelBuffer = solver.kernel.accelBuffer;
+    if (solver && solver.isDataReady()) {
+        const accelBuffer = solver.getAccelBuffer();
+        console.log(accelBuffer)
+        if (accelBuffer.length == 0) { throw "accelbuffer error" }
         for (let i = 0; i < linkBuffer.length; i += 2) {
             const i1 = linkBuffer[i], i2 = linkBuffer[i + 1];
             const p1 = GetPoint(i1, nodeBuffer),
@@ -62,9 +74,14 @@ export function DataUpdate(
 
 
         device.queue.writeBuffer(nodeBufferGPU, 0, nodeBuffer);
-
-        if (iterCount > 100) { solver = null; return; }
-        solver = new FMMSolver(nodeBuffer, "wgpu");
+        solver = null;
+        msg.innerHTML = "iter: " + iterCount;
+    }
+    if (!stepMode || next) {
+        next = false;
+        if (iterCount > maxIter) { solver = null; return; }
+        //solver = new FMMSolver(nodeBuffer, "wgpu");
+        solver = new DirectSolver(nodeBuffer);
         solver.main();
         iterCount++;
     }
