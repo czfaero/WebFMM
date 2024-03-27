@@ -1,31 +1,53 @@
-const count = 10000;
+const a = 10, b = 10, c = 4;
+const interval = 0.1;
+const count = a * b * c;
 export const GetNodes = function () {
-    let x = 0, y = 0, z = 0;
+
+    const baseX = -Math.floor(a / 2) * interval,
+        baseY = -Math.floor(b / 2) * interval,
+        baseZ = -Math.floor(c / 2) * interval;
     const iterable = (function* () {
-        for (let i = 0; i < count; i++) {
-            yield x - 50;
-            yield y - 50;
-            yield z - 50;
-            yield 1;
-            x++;
-            if (x > 99) {
-                x = 0; y++;
-                if (y > 99) {
-                    y = 0; z++;
+
+        for (let x = 0; x < a; x++)
+            for (let y = 0; y < b; y++)
+                for (let z = 0; z < c; z++) {
+                    yield x + baseX;
+                    yield y + baseY;
+                    yield z + baseZ;
+                    yield 1;
                 }
-            }
-        }
     })();
     const nodes = new Float32Array(iterable);
-    console.log(nodes.length);
+    //console.log(nodes.length);
     return nodes;
 }
 export const GetLinks = function () {
-    const links = new Uint32Array(count * 2);
-    for (let i = 0; i < count; i++) {
-        links[i * 2] = i;
-        links[i * 2 + 1] = (i + 1) % count;
-    }
+    const iterable = (function* () {
+        for (let x = 0; x < a; x++)
+            for (let y = 0; y < b; y++)
+                for (let z = 0; z < c - 1; z++) {
+                    let i = x * b * c + y * c + z;
+                    yield i;
+                    yield i + 1;
+                }
+        for (let x = 0; x < a; x++)
+            for (let y = 0; y < b - 1; y++) {
+                let i = x * b * c + y * c;
+                yield i;
+                yield i + c;
+
+            }
+
+            for (let x = 0; x < a-1; x++){
+                let i = x * b * c;
+                yield i;
+                yield i + b*c;
+            }
+
+    })();
+
+
+    const links = new Uint32Array(iterable);
 
     return links;
 }
