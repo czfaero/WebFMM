@@ -43,9 +43,9 @@ fn direct(@builtin(global_invocation_id) id : vec3<u32>) {
         let r = p2p_core(p1,p2);
         accel+=r;
     }
-    resultBuffer[i*3] = accel.x;
-    resultBuffer[i*3+1] = accel.y;
-    resultBuffer[i*3+2] = accel.z;
+    resultBuffer[i*3] = -accel.x;
+    resultBuffer[i*3+1] = -accel.y;
+    resultBuffer[i*3+2] = -accel.z;
 
     //resultBuffer[i*3] = f32(i);
 }
