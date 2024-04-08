@@ -53,6 +53,12 @@ export class FPSController {
         if (this.keyStatus.S) {
             vec3.scaleAndAdd(this.position, this.position, this.front, -deltaTime * speed);
         }
+        if (this.keyStatus.Q) {
+            vec3.scaleAndAdd(this.position, this.position, this.up, deltaTime * speed);
+        }
+        if (this.keyStatus.Z) {
+            vec3.scaleAndAdd(this.position, this.position, this.up, -deltaTime * speed);
+        }
         if (this.keyStatus.Up) {
             this.rotationXDeg = clamp(
                 this.rotationXDeg + rotationSpeed * deltaTime,
@@ -92,6 +98,7 @@ class KeyStatus {
     Right: boolean;
     Left: boolean;
     W: boolean; S: boolean; A: boolean; D: boolean;
+    Q: boolean; Z: boolean;
     Space: boolean;
     constructor() {
         type NameKey = keyof KeyStatus;
@@ -104,6 +111,8 @@ class KeyStatus {
             "KeyS": "S",
             "KeyD": "D",
             "KeyW": "W",
+            "KeyQ": "Q",
+            "KeyZ": "Z",
         };
         document.addEventListener('keydown', (e) => {
             // e.repeat
