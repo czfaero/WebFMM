@@ -1,8 +1,10 @@
 import wgsl from './shaders/Direct.wgsl';
+import { TreeBuilder } from './TreeBuilder';
 const SIZEOF_32 = 4;
 const eps = 1e-6;
 const inv4PI = 0.25 / Math.PI;
 export class DirectSolver {
+    tree:TreeBuilder;
     adapter: GPUAdapter;
     device: GPUDevice;
     shaderModule: GPUShaderModule;
@@ -10,20 +12,21 @@ export class DirectSolver {
     accelBufferGPU: GPUBuffer;
     readBufferGPU: GPUBuffer;
     uniformBufferGPU: GPUBuffer;
-    particleBuffer: Float32Array
+    nodeBuffer: Float32Array
     particleCount: number;
     dataReady: boolean;
     accelBuffer: Float32Array;
     isDataReady() { return this.dataReady; }
     getAccelBuffer() { return this.accelBuffer; }
 
-    constructor(particleBuffer: Float32Array) {
-        this.particleBuffer = particleBuffer;
+    constructor(tree: TreeBuilder) {
+        this.nodeBuffer = tree.nodeBuffer;
+        this.tree=tree;
     }
 
     async Init() {
 
-        this.particleCount = this.particleBuffer.length / 4
+        this.particleCount = this.nodeBuffer.length / 4
         this.adapter = await navigator.gpu.requestAdapter();
         this.device = await this.adapter.requestDevice();
 
@@ -36,7 +39,7 @@ export class DirectSolver {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         this.particleBufferGPU = this.device.createBuffer({
-            size: this.particleBuffer.byteLength,
+            size: this.nodeBuffer.byteLength,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
         this.accelBufferGPU = this.device.createBuffer({
@@ -49,7 +52,7 @@ export class DirectSolver {
         });
 
 
-        this.device.queue.writeBuffer(this.particleBufferGPU, 0, this.particleBuffer);
+        this.device.queue.writeBuffer(this.particleBufferGPU, 0, this.nodeBuffer);
     }
 
     async main() {
@@ -116,10 +119,10 @@ export class DirectSolver {
     }
     getParticle(i: number) {
         return {
-            x: this.particleBuffer[i * 4],
-            y: this.particleBuffer[i * 4 + 1],
-            z: this.particleBuffer[i * 4 + 2],
-            w: this.particleBuffer[i * 4 + 3]
+            x: this.nodeBuffer[i * 4],
+            y: this.nodeBuffer[i * 4 + 1],
+            z: this.nodeBuffer[i * 4 + 2],
+            w: this.nodeBuffer[i * 4 + 3]
         }
     }
 

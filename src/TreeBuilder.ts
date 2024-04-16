@@ -1,11 +1,12 @@
 
 
 export class TreeBuilder {
-    particleBuffer: Float32Array;
-    edgeBuffer: Uint32Array;
+    nodeBuffer: Float32Array;
+    colorBuffer: Float32Array;
+    linkBuffer: Uint32Array;
     particleCount: number;
     getParticle(i: number) {
-        const particleBuffer = this.particleBuffer;
+        const particleBuffer = this.nodeBuffer;
         return {
             x: particleBuffer[i * 4],
             y: particleBuffer[i * 4 + 1],
@@ -66,7 +67,7 @@ export class TreeBuilder {
 
     /**@return Array, box id for every partical*/
     morton(): Int32Array {
-        const particleBuffer = this.particleBuffer;
+        const particleBuffer = this.nodeBuffer;
         const maxLevel = this.maxLevel;
         const particleCount = particleBuffer.length / 4;
         const resultIndex = new Int32Array(particleCount);
@@ -122,26 +123,42 @@ export class TreeBuilder {
     sortParticles() {
         const mortonIndex = this.morton();
         const { sortValue, sortIndex } = this.sort(mortonIndex);
+        console.log(sortValue)
+        console.log(sortIndex)
 
-        const tempParticle = new Float32Array(this.particleBuffer.length);
+        const tempNodes = new Float32Array(this.nodeBuffer.length);
+        const tempColor = new Float32Array(this.colorBuffer.length);
+        const inverseSortIndex = new Uint32Array(sortIndex.length);
         for (let i = 0; i < this.particleCount; i++) {
             const offset = sortIndex[i] * 4;
-            tempParticle.set(this.particleBuffer.subarray(offset, offset + 4), i * 4);
+            tempNodes.set(this.nodeBuffer.subarray(offset, offset + 4), i * 4);
+            const offset3 = sortIndex[i] * 3;
+            tempColor.set(this.colorBuffer.subarray(offset3, offset3 + 3), i * 3);
+            inverseSortIndex[sortIndex[i]] = i;
         }
-        this.particleBuffer = tempParticle;
+        console.log(this.linkBuffer)
+
+        for (let i = 0; i < this.linkBuffer.length; i++) {
+            this.linkBuffer[i] = inverseSortIndex[this.linkBuffer[i]];
+        }
+        console.log(this.linkBuffer)
+        this.nodeBuffer.set(tempNodes);
+        console.log(this.nodeBuffer)
+        this.colorBuffer.set(tempColor);
+        this.colorBuffer.set([1, 1, 1]);
     }
 
-    constructor(particleBuffer: Float32Array, edgeBuffer: Uint32Array) {
-        this.particleBuffer = particleBuffer;
+    constructor(particleBuffer: Float32Array, edgeBuffer: Uint32Array, colorBuffer: Float32Array) {
+        this.nodeBuffer = particleBuffer;
         this.particleCount = particleBuffer.length / 4;
-        this.edgeBuffer = edgeBuffer;
-    }
+        this.linkBuffer = edgeBuffer;
+        this.colorBuffer = colorBuffer;
+        // if (colorBuffer.length / 3 != this.particleCount) { throw "Color buffer length not match: " + this.colorBuffer.length }
 
-
-    main() {
         this.setBoxSize();
         this.setOptimumLevel();
         this.sortParticles();
     }
+
 
 }

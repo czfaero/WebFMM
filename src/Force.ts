@@ -1,14 +1,19 @@
 import { FMMSolver } from './FMMSolver';
 import { DirectSolver } from './DirectSolver';
+import { TreeBuilder } from './TreeBuilder';
 
-const k = 2;// spring
-const delta = 0.1;//delta time ^2
+const k = 1;// spring force coef
+const k_distance = 0.1;// distance when spring 0 force
+const delta = 0.2;//delta time ^2
 
 var solver: any;
 var next = false;
-const stepMode = false;
-const maxIter = 1000;
+const stepMode = true;
+const maxIter = 5;
 const msg = document.querySelector("#msg") as HTMLSpanElement;
+
+let tree: TreeBuilder;
+
 
 export function DataStart(nodeBuffer: Float32Array,
     linkBuffer: Uint32Array) {
@@ -39,31 +44,41 @@ function GetDist(p1, p2) {
         z: p2.z - p1.z
     };
 }
+function GetSquareLength(vec) {
+    return vec.x * vec.x + vec.y * vec.y + vec.z * vec.z;
+}
 var iterCount = 0;
 export function DataUpdate(
     nodeBuffer: Float32Array,
     linkBuffer: Uint32Array,
+    colorBuffer: Float32Array,
     nodeBufferGPU: GPUBuffer,
     linkBufferGPU: GPUBuffer,
+    colorBufferGPU: GPUBuffer,
     device: GPUDevice
 ) {
 
 
     if (solver && solver.isDataReady()) {
         const accelBuffer = solver.getAccelBuffer();
-        console.log(accelBuffer)
+        //console.log(accelBuffer)
         if (accelBuffer.length == 0) { throw "accelbuffer error" }
         for (let i = 0; i < linkBuffer.length; i += 2) {
             const i1 = linkBuffer[i], i2 = linkBuffer[i + 1];
             const p1 = GetPoint(i1, nodeBuffer),
                 p2 = GetPoint(i2, nodeBuffer);
             const dist = GetDist(p1, p2);
-            accelBuffer[i1 * 3] += dist.x * k;
-            accelBuffer[i1 * 3 + 1] += dist.y * k;
-            accelBuffer[i1 * 3 + 2] += dist.z * k;
-            accelBuffer[i2 * 3] -= dist.x * k;
-            accelBuffer[i2 * 3 + 1] -= dist.y * k;
-            accelBuffer[i2 * 3 + 2] -= dist.z * k;
+            const l_sqr = GetSquareLength(dist);
+            const l = Math.sqrt(l_sqr);
+            const l_ = l - k_distance;
+            const normalized = { x: dist.x / l, y: dist.y / l, z: dist.z / l };
+            const dist2 = { x: normalized.x * l_, y: normalized.y * l_, z: normalized.z * l_ }
+            accelBuffer[i1 * 3] += dist2.x * k;
+            accelBuffer[i1 * 3 + 1] += dist2.y * k;
+            accelBuffer[i1 * 3 + 2] += dist2.z * k;
+            accelBuffer[i2 * 3] -= dist2.x * k;
+            accelBuffer[i2 * 3 + 1] -= dist2.y * k;
+            accelBuffer[i2 * 3 + 2] -= dist2.z * k;
         }
 
         for (let i = 0; i < nodeBuffer.length / 4; i++) {
@@ -81,7 +96,11 @@ export function DataUpdate(
         next = false;
         if (iterCount > maxIter) { solver = null; return; }
         //solver = new FMMSolver(nodeBuffer, "wgpu");
-        solver = new DirectSolver(nodeBuffer);
+        tree = new TreeBuilder(nodeBuffer, linkBuffer, colorBuffer);
+        device.queue.writeBuffer(linkBufferGPU, 0, linkBuffer);
+        device.queue.writeBuffer(colorBufferGPU, 0, colorBuffer);
+        device.queue.writeBuffer(nodeBufferGPU, 0, nodeBuffer);
+        solver = new DirectSolver(tree);
         solver.main();
         iterCount++;
     }
