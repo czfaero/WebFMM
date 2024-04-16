@@ -1,13 +1,13 @@
 import { NodeLinkRenderer } from './NodeLinkRenderer';
 
 //import { GetNodes, GetLinks } from './diagrams/BinaryLoader'
-import { GetNodes, GetLinks } from './diagrams/TestGraph'
+import { GetNodes, GetLinks,GetNodeColors } from './diagrams/TestGraph'
 ////import { GetNodes, GetLinks,GetNodeColors } from './diagrams/MatrixMarketLoader'
 
 import { FMMSolver } from './FMMSolver';
 
 import { Tester } from './tester'
-import { DataStart,DataUpdate } from './Force';
+import { DataStart, DataUpdate } from './Force';
 
 async function main() {
     if (!navigator.gpu) {
@@ -18,6 +18,7 @@ async function main() {
     const canvas = document.querySelector("canvas") as HTMLCanvasElement;
     const nodes = await GetNodes();
     const links = await GetLinks();
+    const colors=await GetNodeColors();
 
     //const tester = new Tester();
 
@@ -30,10 +31,8 @@ async function main() {
     //     await tester.Test(solver2);
     // } catch (e) { throw e; }
 
-    DataStart(nodes,links);
+    DataStart(nodes, links);
     const renderer = new NodeLinkRenderer();
-    const colors = new Float32Array(nodes.length);
-    colors.fill(1);
     renderer.setData(nodes, links, colors);
     renderer.setDataUpdate(DataUpdate);
     await renderer.init(canvas);

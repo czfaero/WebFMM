@@ -347,7 +347,7 @@ export class NodeLinkRenderer {
         function Update(time: DOMHighResTimeStamp) {
             UpdateView(time);
             if (_.dataUpdate) {
-                _.dataUpdate(_.nodeBuffer, _.linkBuffer, nodesBuffer0, gpuLinkBuffer, device);
+                _.dataUpdate(_.nodeBuffer, _.linkBuffer, _.nodeColorBuffer, nodesBuffer0, gpuLinkBuffer, nodeColorsBuffer, device);
             }
             const commandEncoder = device.createCommandEncoder();
 
