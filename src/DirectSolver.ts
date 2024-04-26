@@ -4,7 +4,7 @@ const SIZEOF_32 = 4;
 const eps = 1e-6;
 const inv4PI = 0.25 / Math.PI;
 export class DirectSolver {
-    tree:TreeBuilder;
+    tree: TreeBuilder;
     adapter: GPUAdapter;
     device: GPUDevice;
     shaderModule: GPUShaderModule;
@@ -13,23 +13,48 @@ export class DirectSolver {
     readBufferGPU: GPUBuffer;
     uniformBufferGPU: GPUBuffer;
     nodeBuffer: Float32Array
-    particleCount: number;
+    nodeCount: number;
     dataReady: boolean;
     accelBuffer: Float32Array;
+    useWgpu: boolean;
+
+
     isDataReady() { return this.dataReady; }
     getAccelBuffer() { return this.accelBuffer; }
 
     constructor(tree: TreeBuilder) {
         this.nodeBuffer = tree.nodeBuffer;
-        this.tree=tree;
+        this.tree = tree;
+        this.nodeCount = this.nodeBuffer.length / 4;
+        //this.useWgpu = true;
     }
 
-    async Init() {
 
-        this.particleCount = this.nodeBuffer.length / 4
+    async main() {
+        if (this.useWgpu) {
+            await this.Init_wgpu();
+            await this.Calc_wgpu();
+            this.Release_wgpu();
+        } else {
+            this.Calc();
+        }
+        this.dataReady = true;
+    }
+
+
+
+    getParticle(i: number) {
+        return {
+            x: this.nodeBuffer[i * 4],
+            y: this.nodeBuffer[i * 4 + 1],
+            z: this.nodeBuffer[i * 4 + 2],
+            w: this.nodeBuffer[i * 4 + 3]
+        }
+    }
+
+    async Init_wgpu() {
         this.adapter = await navigator.gpu.requestAdapter();
         this.device = await this.adapter.requestDevice();
-
 
         this.shaderModule = this.device.createShaderModule({
             code: wgsl,
@@ -51,21 +76,22 @@ export class DirectSolver {
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
         });
 
-
         this.device.queue.writeBuffer(this.particleBufferGPU, 0, this.nodeBuffer);
     }
+    Release_wgpu() {
+        this.device.destroy();
+    }
+    async Calc_wgpu() {
 
-    async main() {
-        await this.Init();
         const threadPerGroup = 128;
 
-        let workgroupCount = Math.ceil(this.particleCount / threadPerGroup);
+        let workgroupCount = Math.ceil(this.nodeCount / threadPerGroup);
 
         const uniformBuffer = new Float32Array(1);
         uniformBuffer[0] = 0;
 
         const uniformBuffer2 = new Uint32Array(1);
-        uniformBuffer2[0] = this.particleCount;
+        uniformBuffer2[0] = this.nodeCount;
 
         this.device.queue.writeBuffer(this.uniformBufferGPU, 0, uniformBuffer);
         this.device.queue.writeBuffer(this.uniformBufferGPU, uniformBuffer.byteLength, uniformBuffer2);
@@ -109,29 +135,15 @@ export class DirectSolver {
 
 
         this.readBufferGPU.unmap();
-        this.dataReady = true;
-        this.Release();
+
     }
 
-
-    Release() {
-        this.device.destroy();
-    }
-    getParticle(i: number) {
-        return {
-            x: this.nodeBuffer[i * 4],
-            y: this.nodeBuffer[i * 4 + 1],
-            z: this.nodeBuffer[i * 4 + 2],
-            w: this.nodeBuffer[i * 4 + 3]
-        }
-    }
-
-    direct() {
-        const accelBuffer = new Float32Array(this.particleCount * 3);
-        for (let i = 0; i < this.particleCount; i++) {
+    Calc() {
+        const accelBuffer = new Float32Array(this.nodeCount * 3);
+        for (let i = 0; i < this.nodeCount; i++) {
             let ax = 0, ay = 0, az = 0;
             const p1 = this.getParticle(i);
-            for (let j = 0; j < this.particleCount; j++) {
+            for (let j = 0; j < this.nodeCount; j++) {
                 if (i == j) continue;
                 const p2 = this.getParticle(j);
                 let dx = p1.x - p2.x,
@@ -143,9 +155,10 @@ export class DirectSolver {
                 ay -= dy * invDistCube;
                 az -= dz * invDistCube;
             }
-            accelBuffer[i * 3] = inv4PI * ax;
-            accelBuffer[i * 3 + 1] = inv4PI * ay;
-            accelBuffer[i * 3 + 2] = inv4PI * az;
+            accelBuffer[i * 3] = -inv4PI * ax;
+            accelBuffer[i * 3 + 1] = -inv4PI * ay;
+            accelBuffer[i * 3 + 2] = -inv4PI * az;
         }
+        this.accelBuffer=accelBuffer;
     }
 }
