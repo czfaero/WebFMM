@@ -9,7 +9,7 @@ const delta = 0.2;//delta time ^2
 var solver: any;
 var next = false;
 const stepMode = true;
-const maxIter = 5;
+const maxIter = 50;
 const msg = document.querySelector("#msg") as HTMLSpanElement;
 
 let tree: TreeBuilder;
@@ -88,6 +88,8 @@ export function DataUpdate(
         }
 
 
+        device.queue.writeBuffer(linkBufferGPU, 0, linkBuffer);
+        device.queue.writeBuffer(colorBufferGPU, 0, colorBuffer);
         device.queue.writeBuffer(nodeBufferGPU, 0, nodeBuffer);
         solver = null;
         msg.innerHTML = "iter: " + iterCount;
@@ -97,9 +99,9 @@ export function DataUpdate(
         if (iterCount > maxIter) { solver = null; return; }
         //solver = new FMMSolver(nodeBuffer, "wgpu");
         tree = new TreeBuilder(nodeBuffer, linkBuffer, colorBuffer);
-        device.queue.writeBuffer(linkBufferGPU, 0, linkBuffer);
-        device.queue.writeBuffer(colorBufferGPU, 0, colorBuffer);
-        device.queue.writeBuffer(nodeBufferGPU, 0, nodeBuffer);
+        // device.queue.writeBuffer(linkBufferGPU, 0, linkBuffer);
+        // device.queue.writeBuffer(colorBufferGPU, 0, colorBuffer);
+        // device.queue.writeBuffer(nodeBufferGPU, 0, nodeBuffer);
         solver = new DirectSolver(tree);
         solver.main();
         iterCount++;
