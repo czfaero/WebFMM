@@ -1,5 +1,5 @@
 const size_a = 10, size_b = 10, size_c = 4;
-const interval = 0.1;
+const interval = 0.5;
 const count = size_a * size_b * size_c;
 export const GetNodes = function () {
 
@@ -11,9 +11,9 @@ export const GetNodes = function () {
         for (let x = 0; x < size_a; x++)
             for (let y = 0; y < size_b; y++)
                 for (let z = 0; z < size_c; z++) {
-                    yield x + baseX;
-                    yield y + baseY;
-                    yield z + baseZ;
+                    yield x * interval + baseX;
+                    yield y * interval + baseY;
+                    yield z * interval + baseZ;
                     yield 1;
                 }
     })();
