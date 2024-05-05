@@ -5,11 +5,10 @@ import { TreeBuilder } from './TreeBuilder';
 const k = 1;// spring force coef
 const k_distance = 0.1;// distance when spring 0 force
 const delta = 0.2;//delta time ^2
-
 var solver: any;
 var next = false;
-const stepMode = true;
-const maxIter = 50;
+const stepMode = false;
+const maxIter = 5000;
 const msg = document.querySelector("#msg") as HTMLSpanElement;
 
 let tree: TreeBuilder;
@@ -93,6 +92,7 @@ export function DataUpdate(
         device.queue.writeBuffer(nodeBufferGPU, 0, nodeBuffer);
         solver = null;
         msg.innerHTML = "iter: " + iterCount;
+       // if (iterCount == 1) { RecordVideo() }
     }
     if (!stepMode || next) {
         next = false;
@@ -111,5 +111,49 @@ export function DataUpdate(
     //solver.kernel.debug = true;
 
 
+
+}
+
+function RecordVideo() {
+    const canvas = document.querySelector("canvas") as HTMLCanvasElement;
+    // Optional frames per second argument.
+    const stream = canvas.captureStream(25);
+    const recordedChunks = [];
+
+    console.log(stream);
+    const options = { mimeType: "video/webm; codecs=vp9" };
+    const mediaRecorder = new MediaRecorder(stream, options);
+
+    mediaRecorder.ondataavailable = handleDataAvailable;
+    mediaRecorder.start();
+
+    function handleDataAvailable(event) {
+        console.log("data-available");
+        if (event.data.size > 0) {
+            recordedChunks.push(event.data);
+            console.log(recordedChunks);
+            download();
+        } else {
+            // …
+        }
+    }
+    function download() {
+        const blob = new Blob(recordedChunks, {
+            type: "video/webm",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        document.body.appendChild(a);
+        a.style.cssText = "display: none";
+        a.href = url;
+        a.download = "test.webm";
+        a.click();
+        window.URL.revokeObjectURL(url);
+    }
+
+    setTimeout((event) => {
+        console.log("stopping");
+        mediaRecorder.stop();
+    }, 10000);
 
 }
