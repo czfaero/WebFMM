@@ -10,7 +10,6 @@ import wgsl_buffer_sum from '../shaders/buffer_sum.wgsl';
 import { IKernel } from './kernel';
 import { FMMSolver } from '../FMMSolver';
 
-import { Tester } from '../tester';
 
 const eps = 1e-6;
 const inv4PI = 0.25 / Math.PI;
@@ -121,15 +120,15 @@ export class KernelWgpu implements IKernel {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
     this.mnmBufferGPU = this.device.createBuffer({
-      size: this.core.numBoxIndexTotal * this.core.numCoefficients * 2 * SIZEOF_32,
+      size: core.tree.numBoxIndexTotal * this.core.numCoefficients * 2 * SIZEOF_32,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
     this.lnmBufferGPU = this.device.createBuffer({
-      size: this.core.numBoxIndexLeaf * this.core.numCoefficients * 2 * SIZEOF_32,
+      size: core.tree.numBoxIndexLeaf * this.core.numCoefficients * 2 * SIZEOF_32,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
     this.lnmOldBufferGPU = this.device.createBuffer({
-      size: this.core.numBoxIndexLeaf * this.core.numCoefficients * 2 * SIZEOF_32,
+      size: core.tree.numBoxIndexLeaf * this.core.numCoefficients * 2 * SIZEOF_32,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
     this.resultBufferGPU = this.device.createBuffer({
@@ -579,6 +578,7 @@ export class KernelWgpu implements IKernel {
   Lnm: Array<Float32Array>;
   factorial: Float32Array;
   async p2m(numBoxIndex: number, particleOffset: any) {
+    const core=this.core;
 
     let fact = 1.0;
     let factorial = new Float32Array(2 * this.core.numExpansions);
@@ -593,11 +593,11 @@ export class KernelWgpu implements IKernel {
     // command (boxId)
     let command = new Uint32Array(numBoxIndex);
     for (let i = 0; i < numBoxIndex; i++) {
-      command[i] = this.core.boxIndexFull[i];
+      command[i] = core.tree.boxIndexFull[i];
     }
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, numBoxIndex);
 
-    const boxSize = this.core.rootBoxSize / (1 << this.core.maxLevel);
+    const boxSize = core.tree.rootBoxSize / (1 << core.tree.maxLevel);
 
     let maxParticlePerBox = 0;
     for (let jj = 0; jj < numBoxIndex; jj++) {
@@ -607,9 +607,9 @@ export class KernelWgpu implements IKernel {
 
     const uniformBuffer = new Float32Array(4);
     uniformBuffer[0] = boxSize;
-    uniformBuffer[1] = this.core.boxMinX;
-    uniformBuffer[2] = this.core.boxMinY;
-    uniformBuffer[3] = this.core.boxMinZ;
+    uniformBuffer[1] = core.tree.boxMinX;
+    uniformBuffer[2] = core.tree.boxMinY;
+    uniformBuffer[3] = core.tree.boxMinZ;
     const uniformBuffer2 = new Uint32Array(3);
     uniformBuffer2[0] = numBoxIndex;
     uniformBuffer2[1] = this.core.numExpansions;
@@ -627,7 +627,7 @@ export class KernelWgpu implements IKernel {
       await this.readBufferGPU.mapAsync(GPUMapMode.READ);
       const handle = this.readBufferGPU.getMappedRange();
       let tempReadBuffer = new Float32Array(handle);
-      this.Mnm = new Array(this.core.numBoxIndexTotal);
+      this.Mnm = new Array(core.tree.numBoxIndexTotal);
       for (let i = 0; i < numBoxIndex; i++) {
         const MnmVec = new Float32Array(this.core.numCoefficients * 2);
         for (let j = 0; j < this.core.numCoefficients * 2; j++) {
@@ -650,10 +650,10 @@ export class KernelWgpu implements IKernel {
     let command_sum = new Int32Array(1 << 3 * numLevel);
 
     for (let jj = 0; jj < numBoxIndexOld; jj++) {
-      let jb = jj + core.levelOffset[numLevel];
-      let nfjp = Math.trunc(core.boxIndexFull[jb] / 8);
-      let nfjc = core.boxIndexFull[jb] % 8;
-      let ib = core.boxIndexMask[nfjp] + core.levelOffset[numLevel - 1];// MnmIndex
+      let jb = jj + core.tree.levelOffset[numLevel];
+      let nfjp = Math.trunc(core.tree.boxIndexFull[jb] / 8);
+      let nfjc = core.tree.boxIndexFull[jb] % 8;
+      let ib = core.tree.boxIndexMask[nfjp] + core.tree.levelOffset[numLevel - 1];// MnmIndex
       let boxIndex3D = core.unmorton(nfjc);
       boxIndex3D.x = 4 - boxIndex3D.x * 2;
       boxIndex3D.y = 4 - boxIndex3D.y * 2;
@@ -661,7 +661,7 @@ export class KernelWgpu implements IKernel {
       let je = core.morton1(boxIndex3D, 3);
       command[jj * commandLength + 0] = jb;//Mnm index
       command[jj * commandLength + 1] = je + 1;
-      command[jj * commandLength + 2] = core.boxIndexFull[jb];//to-do: check for empty box or more level 
+      command[jj * commandLength + 2] = core.tree.boxIndexFull[jb];//to-do: check for empty box or more level 
       //command[jj * commandLength + 3] = ib;
       //console.log(command[jj * 3 + 2])
       command_sum[nfjp] = ib;
@@ -670,7 +670,7 @@ export class KernelWgpu implements IKernel {
     //console.log(command_sum)
 
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, numBoxIndexOld * 3);
-    const boxSize = this.core.rootBoxSize / (1 << numLevel);
+    const boxSize = core.tree.rootBoxSize / (1 << numLevel);
 
     const uniformBuffer = new Float32Array(1);
     uniformBuffer[0] = boxSize;
@@ -710,8 +710,8 @@ export class KernelWgpu implements IKernel {
       await this.readBufferGPU.mapAsync(GPUMapMode.READ);
       const handle = this.readBufferGPU.getMappedRange();
       let tempReadBuffer = new Float32Array(handle);
-      this.Mnm = new Array(this.core.numBoxIndexTotal);
-      for (let i = 0; i < this.core.numBoxIndexTotal; i++) {
+      this.Mnm = new Array(core.tree.numBoxIndexTotal);
+      for (let i = 0; i < core.tree.numBoxIndexTotal; i++) {
         const MnmVec = new Float32Array(this.core.numCoefficients * 2);
         for (let j = 0; j < this.core.numCoefficients * 2; j++) {
           MnmVec[j] = tempReadBuffer[i * this.core.numCoefficients * 2 + j];
@@ -731,21 +731,21 @@ export class KernelWgpu implements IKernel {
     let command = new Int32Array(commandLength * numBoxIndex);
 
     for (let ii = 0; ii < numBoxIndex; ii++) {
-      let ib = ii + core.levelOffset[numLevel - 1];
-      let indexi = core.unmorton(core.boxIndexFull[ib]);
+      let ib = ii + core.tree.levelOffset[numLevel - 1];
+      let indexi = core.unmorton(core.tree.boxIndexFull[ib]);
       let ix = indexi.x,
         iy = indexi.y,
         iz = indexi.z;
 
-      command[ii * commandLength] = core.numInteraction[ii];
-      for (let ij = 0; ij < core.numInteraction[ii]; ij++) {
+      command[ii * commandLength] = core.tree.numInteraction[ii];
+      for (let ij = 0; ij < core.tree.numInteraction[ii]; ij++) {
         let jj = core.interactionList[ii][ij];
-        let jbd = jj + core.levelOffset[numLevel - 1];
-        let indexj = core.unmorton(core.boxIndexFull[jbd]);
+        let jbd = jj + core.tree.levelOffset[numLevel - 1];
+        let indexj = core.unmorton(core.tree.boxIndexFull[jbd]);
         let jx = indexj.x, jy = indexj.y, jz = indexj.z;
 
         let je = core.morton1({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3);
-        let jb = jj + core.levelOffset[numLevel - 1];
+        let jb = jj + core.tree.levelOffset[numLevel - 1];
         command[ii * commandLength + 1 + ij * 2] = jb;//Mnm index
         command[ii * commandLength + 1 + ij * 2 + 1] = je + 1;
 
@@ -755,7 +755,7 @@ export class KernelWgpu implements IKernel {
     // console.log(command);
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0);
 
-    const boxSize = this.core.rootBoxSize / (1 << numLevel);
+    const boxSize = core.tree.rootBoxSize / (1 << numLevel);
 
     const uniformBuffer = new Float32Array(1);
     uniformBuffer[0] = boxSize;
@@ -772,8 +772,8 @@ export class KernelWgpu implements IKernel {
         const handle = this.readBufferGPU.getMappedRange();
         let tempReadBuffer = new Float32Array(handle);
         {
-          this.Lnm = new Array(this.core.numBoxIndexLeaf);
-          for (let i = 0; i < this.core.numBoxIndexTotal; i++) {
+          this.Lnm = new Array(core.tree.numBoxIndexLeaf);
+          for (let i = 0; i < core.tree.numBoxIndexTotal; i++) {
             const LnmVec = new Float32Array(this.core.numCoefficients * 2);
             for (let j = 0; j < this.core.numCoefficients * 2; j++) {
               LnmVec[j] = tempReadBuffer[i * this.core.numCoefficients * 2 + j];
@@ -797,14 +797,14 @@ export class KernelWgpu implements IKernel {
     const commandLength = 2;
     let command = new Int32Array(commandLength * numBoxIndex);
 
-    let nbc = -1, neo = new Array(core.numBoxIndexFull);
+    let nbc = -1, neo = new Array(core.tree.numBoxIndexFull);
     let numBoxIndexOld = 0;
 
-    for (let i = 0; i < core.numBoxIndexFull; i++) { neo[i] = -1; }
+    for (let i = 0; i < core.tree.numBoxIndexFull; i++) { neo[i] = -1; }
     for (let ii = 0; ii < numBoxIndex; ii++) {
-      let ib = ii + core.levelOffset[numLevel - 1];
-      if (nbc != Math.floor(core.boxIndexFull[ib] / 8)) {
-        nbc = Math.floor(core.boxIndexFull[ib] / 8);
+      let ib = ii + core.tree.levelOffset[numLevel - 1];
+      if (nbc != Math.floor(core.tree.boxIndexFull[ib] / 8)) {
+        nbc = Math.floor(core.tree.boxIndexFull[ib] / 8);
         neo[nbc] = numBoxIndexOld;
         numBoxIndexOld++;
       }
@@ -821,9 +821,9 @@ export class KernelWgpu implements IKernel {
     // }
 
     for (let ii = 0; ii < numBoxIndex; ii++) {
-      let ib = ii + core.levelOffset[numLevel - 1];
-      let nfip = Math.floor(core.boxIndexFull[ib] / 8);
-      let nfic = core.boxIndexFull[ib] % 8;
+      let ib = ii + core.tree.levelOffset[numLevel - 1];
+      let nfip = Math.floor(core.tree.boxIndexFull[ib] / 8);
+      let nfic = core.tree.boxIndexFull[ib] % 8;
       let boxIndex3D = core.unmorton(nfic);
       boxIndex3D.x = boxIndex3D.x * 2 + 2;
       boxIndex3D.y = boxIndex3D.y * 2 + 2;
@@ -835,7 +835,7 @@ export class KernelWgpu implements IKernel {
       command[ii * commandLength + 1] = je + 1;
     }
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0);
-    const boxSize = core.rootBoxSize / (1 << numLevel);
+    const boxSize = core.tree.rootBoxSize / (1 << numLevel);
     const uniformBuffer = new Float32Array(1);
     uniformBuffer[0] = boxSize;
     this.device.queue.writeBuffer(this.uniformBufferGPU, 0, uniformBuffer);
@@ -857,8 +857,8 @@ export class KernelWgpu implements IKernel {
         const handle = this.readBufferGPU.getMappedRange();
         let tempReadBuffer = new Float32Array(handle);
         {
-          this.Lnm = new Array(this.core.numBoxIndexLeaf);
-          for (let i = 0; i < this.core.numBoxIndexTotal; i++) {
+          this.Lnm = new Array(core.tree.numBoxIndexLeaf);
+          for (let i = 0; i < core.tree.numBoxIndexTotal; i++) {
             const LnmVec = new Float32Array(this.core.numCoefficients * 2);
             for (let j = 0; j < this.core.numCoefficients * 2; j++) {
               LnmVec[j] = tempReadBuffer[i * this.core.numCoefficients * 2 + j];
@@ -878,19 +878,19 @@ export class KernelWgpu implements IKernel {
     const core = this.core;
     const commandLength = 4;//
     let command = new Int32Array(commandLength * numBoxIndex);
-    let boxSize = core.rootBoxSize / (1 << core.maxLevel);
+    let boxSize =core.tree.rootBoxSize / (1 << core.tree.maxLevel);
     const threadsPerGroup = 256;
     // loop foreach box set group
     let groupCount = 0;
     for (let ii = 0; ii < numBoxIndex; ii++) {
-      let nParticle = core.particleOffset[1][ii] - core.particleOffset[0][ii];
+      let nParticle = core.tree.particleOffset[1][ii] - core.tree.particleOffset[0][ii];
       let nGroup = (nParticle + threadsPerGroup) / threadsPerGroup;
       nGroup = Math.floor(nGroup);
       for (let n = 0; n < nGroup; n++) {
         command[groupCount * commandLength + 0] = ii;
-        command[groupCount * commandLength + 1] = core.particleOffset[0][ii] + n * threadsPerGroup;
+        command[groupCount * commandLength + 1] = core.tree.particleOffset[0][ii] + n * threadsPerGroup;
         command[groupCount * commandLength + 2] = (n == nGroup - 1) ? threadsPerGroup : (nParticle - (nGroup - 1) * threadsPerGroup);
-        command[groupCount * commandLength + 2] = core.boxIndexFull[ii];
+        command[groupCount * commandLength + 2] = core.tree.boxIndexFull[ii];
         groupCount++;
       }
 

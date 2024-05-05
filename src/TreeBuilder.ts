@@ -5,7 +5,7 @@ export class TreeBuilder {
     colorBuffer: Float32Array;
     linkBuffer: Uint32Array;
     particleCount: number;
-    getParticle(i: number) {
+    getNode(i: number) {
         const particleBuffer = this.nodeBuffer;
         return {
             x: particleBuffer[i * 4],
@@ -27,7 +27,7 @@ export class TreeBuilder {
             zmax = -1000000;
 
         for (let i = 0; i < this.particleCount; i++) {
-            const { x, y, z } = this.getParticle(i);
+            const { x, y, z } = this.getNode(i);
             xmin = Math.min(xmin, x);
             xmax = Math.max(xmax, x);
             ymin = Math.min(ymin, y);
@@ -73,7 +73,7 @@ export class TreeBuilder {
         const resultIndex = new Int32Array(particleCount);
         const boxSize = this.rootBoxSize / (1 << maxLevel);
         for (let nodeIndex = 0; nodeIndex < particleCount; nodeIndex++) {
-            const { x, y, z } = this.getParticle(nodeIndex);
+            const { x, y, z } = this.getNode(nodeIndex);
             let nx = Math.floor((x - this.boxMinX) / boxSize),
                 ny = Math.floor((y - this.boxMinY) / boxSize),
                 nz = Math.floor((z - this.boxMinZ) / boxSize);
@@ -135,7 +135,8 @@ export class TreeBuilder {
             tempColor.set(this.colorBuffer.subarray(offset3, offset3 + 3), i * 3);
 
             // debug: viusalize box 
-            tempColor.set(sortValue[i] == 7 ? [1, 1, 1] : [0, 0, 0], i * 3);
+            //tempColor.set(sortValue[i] == 7 ? [1, 1, 1] : [0, 0, 0], i * 3);
+            tempColor.set( [1, 1, 0], i * 3);
 
 
             inverseSortIndex[sortIndex[i]] = i;
@@ -186,7 +187,7 @@ export class TreeBuilder {
     /** int[numBoxIndexLeaf] */
     numInteraction: Int32Array;
     /** int[numBoxIndexLeaf][maxM2LInteraction] */
-    interactionList: any;
+    // interactionList: any;
     // /** int[numBoxIndexLeaf] */
     // boxOffsetStart: Int32Array;
     // /** int[numBoxIndexLeaf] */

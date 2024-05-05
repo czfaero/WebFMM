@@ -1,109 +1,24 @@
 import wgsl from './shaders/FMM.wgsl';
 
 import { IKernel } from './kernels/kernel';
-import { KernelWgpu } from './kernels/kernel_wgpu';
-import { KernelTs } from './kernels/kernel_ts';
+//import { KernelWgpu } from './kernels/kernel_wgpu';
+//import { KernelTs } from './kernels/kernel_ts';
+import { TreeBuilder } from './TreeBuilder';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
 
 export class FMMSolver {
     // Basic data and helper
-    particleBuffer: Float32Array; // vec4
-    particleCount: number;
-    getParticle(i: number) {
-        return {
-            x: this.particleBuffer[i * 4],
-            y: this.particleBuffer[i * 4 + 1],
-            z: this.particleBuffer[i * 4 + 2],
-            w: this.particleBuffer[i * 4 + 3]
-        }
+
+
+    getNode(i: number) {
+        return this.tree.getNode(i);
     }
 
-    // Init box sizes
-    boxMinX: number;
-    boxMinY: number;
-    boxMinZ: number;
-    rootBoxSize: number;
-    setBoxSize() {
-        // FmmSystem::setDomainSize(int numParticles)
-        // 也许可以配合随机生成初始位置简单设定范围。
 
-        let xmin = 1000000,
-            xmax = -1000000,
-            ymin = 1000000,
-            ymax = -1000000,
-            zmin = 1000000,
-            zmax = -1000000;
 
-        for (let i = 0; i < this.particleCount; i++) {
-            const { x, y, z } = this.getParticle(i);
-            xmin = Math.min(xmin, x);
-            xmax = Math.max(xmax, x);
-            ymin = Math.min(ymin, y);
-            ymax = Math.max(ymax, y);
-            zmin = Math.min(zmin, z);
-            zmax = Math.max(zmax, z);
-        }
 
-        this.boxMinX = xmin;
-        this.boxMinY = ymin;
-        this.boxMinZ = zmin;
-
-        this.rootBoxSize = 0;
-        this.rootBoxSize = Math.max(this.rootBoxSize, xmax - xmin, ymax - ymin, zmax - zmin);
-        this.rootBoxSize *= 1.00001; // Keep particle on the edge from falling out
-
-    };
-
-    //setOptimumLevel
-    maxLevel: number;
-    /** All boxes at maxLevel */
-    numBoxIndexFull: number;
-    setOptimumLevel() {
-        // 按照点的数量区间定级别
-        const level_switch = [1e5, 7e5, 7e6, 5e7, 3e8, 2e9]; // gpu-fmm
-
-        this.maxLevel = 2;
-        for (const level of level_switch) {
-            if (this.particleCount >= level) {
-                this.maxLevel++;
-            } else {
-                break;
-            }
-        }
-        console.log("maxLevel: " + this.maxLevel);
-
-        this.numBoxIndexFull = 1 << 3 * this.maxLevel;
-    };
-    /**@return Array, box id for every partical*/
-    morton(): Int32Array {
-        const resultIndex = new Int32Array(this.particleCount);
-        const boxSize = this.rootBoxSize / (1 << this.maxLevel);
-        for (let nodeIndex = 0; nodeIndex < this.particleCount; nodeIndex++) {
-            const { x, y, z } = this.getParticle(nodeIndex);
-            let nx = Math.floor((x - this.boxMinX) / boxSize),
-                ny = Math.floor((y - this.boxMinY) / boxSize),
-                nz = Math.floor((z - this.boxMinZ) / boxSize);
-
-            if (nx >= (1 << this.maxLevel)) nx--;
-            if (ny >= (1 << this.maxLevel)) ny--;
-            if (nz >= (1 << this.maxLevel)) nz--;
-            let boxIndex = 0;
-            for (let level = 0; level < this.maxLevel; level++) {
-                boxIndex += nx % 2 << (3 * level + 1);
-                nx >>= 1;
-
-                boxIndex += ny % 2 << (3 * level);
-                ny >>= 1;
-
-                boxIndex += nz % 2 << (3 * level + 2);
-                nz >>= 1;
-            }
-            resultIndex[nodeIndex] = boxIndex;
-        }
-        return resultIndex;
-    };
     /**@return Object with x,y,z */
     unmorton(boxIndex: number) {
         const mortonIndex3D = new Int32Array(3);
@@ -145,134 +60,26 @@ export class FMMSolver {
         return boxIndex
     }
 
-    /** sort the Morton index
-     * @return sortValue (boxid), sortIndex (i) 
-    */
-    sort(mortonIndex: Int32Array) {
-        const tempSortIndex = new Int32Array(this.numBoxIndexFull);
-        const sortValue = new Int32Array(this.particleCount);
-        const sortIndex = new Int32Array(this.particleCount);
-        for (let i = 0; i < this.particleCount; i++) {
-            sortIndex[i] = i;
-        }
-        tempSortIndex.fill(0);
-        for (const i in mortonIndex) {
-            tempSortIndex[mortonIndex[i]]++;
-        }
-        for (let i = 1; i < this.numBoxIndexFull; i++) {
-            tempSortIndex[i] += tempSortIndex[i - 1];
-        }
-        for (let i = this.particleCount - 1; i >= 0; i--) {
-            tempSortIndex[mortonIndex[i]]--;
-            sortValue[tempSortIndex[mortonIndex[i]]] = mortonIndex[i];
-            sortIndex[tempSortIndex[mortonIndex[i]]] = i;
-        }
-        return { sortValue, sortIndex }
-    }
-    sortParticles() {
-        const mortonIndex = this.morton();
-        const { sortValue, sortIndex } = this.sort(mortonIndex);
 
-        const tempParticle = new Float32Array(this.particleBuffer.length);
-        for (let i = 0; i < this.particleCount; i++) {
-            const offset = sortIndex[i] * 4;
-            tempParticle.set(this.particleBuffer.subarray(offset, offset + 4), i * 4);
-        }
-        this.particleBuffer = tempParticle;
-    };
-    /** non-empty FMM boxes @ maxLevel */
-    numBoxIndexLeaf: number;
-    /** numBoxIndexLeaf for all levels */
-    numBoxIndexTotal: number;
-    countNonEmptyBoxes() {
-        const mortonIndex = this.morton();
-        const { sortValue, sortIndex } = this.sort(mortonIndex);
-        this.numBoxIndexLeaf = 0;
-        let currentIndex = -1;
-        for (let i = 0; i < this.particleCount; i++) {
-            if (sortValue[i] != currentIndex) {
-                this.numBoxIndexLeaf++;
-                currentIndex = sortValue[i];
-            }
-        }
 
-        this.numBoxIndexTotal = this.numBoxIndexLeaf;
-        for (let numLevel = this.maxLevel - 1; numLevel >= 2; numLevel--) {
-            currentIndex = -1;
-            for (let i = 0; i < this.particleCount; i++) {
-                const temp = Math.floor(sortValue[i] / (1 << 3 * (this.maxLevel - numLevel)));
-                if (temp != currentIndex) {
-                    this.numBoxIndexTotal++;
-                    currentIndex = temp;
-                }
-            }
-        }
-    }
-
-    levelOffset: Int32Array;
-    /**
-     * first and last particle in each box
-     * int[2][numBoxIndexLeaf]
-     */
-    particleOffset: any;
-    /** int[numBoxIndexFull]; link list for box index : Full -> NonEmpty */
-    boxIndexMask: Int32Array;
-    /** int[numBoxIndexTotal]; link list for box index : NonEmpty -> Full */
-    boxIndexFull: Int32Array;
-    /** int[numBoxIndexLeaf] */
-    numInteraction: Int32Array;
-    /** int[numBoxIndexLeaf][maxM2LInteraction] */
     interactionList: any;
-    /** int[numBoxIndexLeaf] */
-    boxOffsetStart: Int32Array;
-    /** int[numBoxIndexLeaf] */
-    boxOffsetEnd: Int32Array;
-    allocate() {
 
-        this.particleOffset = [0, 0].map(_ => new Array(this.numBoxIndexLeaf));
-        this.boxIndexMask = new Int32Array(this.numBoxIndexFull);
-        this.boxIndexFull = new Int32Array(this.numBoxIndexTotal);
-        this.levelOffset = new Int32Array(this.maxLevel);
 
-        this.numInteraction = new Int32Array(this.numBoxIndexLeaf);
-        this.interactionList = new Array(this.numBoxIndexLeaf).fill(0).map(_ => new Int32Array(maxM2LInteraction));
-        this.boxOffsetStart = new Int32Array(this.numBoxIndexLeaf);
-        this.boxOffsetEnd = new Int32Array(this.numBoxIndexLeaf);
-    }
-
-    getBoxData() {
-        const mortonIndex = this.morton();
-
-        let numBoxIndex = 0;
-        let currentIndex = -1;
-        for (let i = 0; i < this.numBoxIndexFull; i++) this.boxIndexMask[i] = -1;
-        for (let i = 0; i < this.particleCount; i++) {
-            if (mortonIndex[i] != currentIndex) {
-                this.boxIndexMask[mortonIndex[i]] = numBoxIndex;
-                this.boxIndexFull[numBoxIndex] = mortonIndex[i];
-                this.particleOffset[0][numBoxIndex] = i;
-                if (numBoxIndex > 0) this.particleOffset[1][numBoxIndex - 1] = i - 1;
-                currentIndex = mortonIndex[i];
-                numBoxIndex++;
-            }
-        }
-        this.particleOffset[1][numBoxIndex - 1] = this.particleCount - 1;
-        return numBoxIndex;
-    }
     // Propagate non-empty/full link list to parent boxes
     getBoxDataOfParent(_numBoxIndex: number, numLevel: number) {
-        this.levelOffset[numLevel - 1] = this.levelOffset[numLevel] + _numBoxIndex;
+        const tree = this.tree;
+        tree.levelOffset[numLevel - 1] = tree.levelOffset[numLevel] + _numBoxIndex;
         let numBoxIndexOld = _numBoxIndex;
         let numBoxIndex = 0;
         let currentIndex = -1;
-        for (let i = 0; i < this.numBoxIndexFull; i++)
-            this.boxIndexMask[i] = -1;
+        for (let i = 0; i < tree.numBoxIndexFull; i++)
+            tree.boxIndexMask[i] = -1;
         for (let i = 0; i < numBoxIndexOld; i++) {
-            let boxIndex = i + this.levelOffset[numLevel];
-            if (currentIndex != Math.floor(this.boxIndexFull[boxIndex] / 8)) {
-                currentIndex = Math.floor(this.boxIndexFull[boxIndex] / 8);
-                this.boxIndexMask[currentIndex] = numBoxIndex;
-                this.boxIndexFull[numBoxIndex + this.levelOffset[numLevel - 1]] = currentIndex;
+            let boxIndex = i + tree.levelOffset[numLevel];
+            if (currentIndex != Math.floor(tree.boxIndexFull[boxIndex] / 8)) {
+                currentIndex = Math.floor(tree.boxIndexFull[boxIndex] / 8);
+                tree.boxIndexMask[currentIndex] = numBoxIndex;
+                tree.boxIndexFull[numBoxIndex + tree.levelOffset[numLevel - 1]] = currentIndex;
                 numBoxIndex++;
             }
         }
@@ -281,15 +88,17 @@ export class FMMSolver {
 
     // Recalculate non-empty box index for current level
     getBoxIndexMask(numBoxIndex: number, numLevel: number) {
-        for (let i = 0; i < this.numBoxIndexFull; i++)
-            this.boxIndexMask[i] = -1;
+        const tree = this.tree;
+        for (let i = 0; i < tree.numBoxIndexFull; i++)
+            tree.boxIndexMask[i] = -1;
         for (let i = 0; i < numBoxIndex; i++) {
-            let boxIndex = i + this.levelOffset[numLevel - 1];
-            this.boxIndexMask[this.boxIndexFull[boxIndex]] = i;
+            let boxIndex = i + tree.levelOffset[numLevel - 1];
+            tree.boxIndexMask[tree.boxIndexFull[boxIndex]] = i;
         }
     }
 
     getInteractionListP2P(numBoxIndex: number, numLevel: number) {
+        const tree = this.tree;
         // Initialize the minimum and maximum values
         let jxmin = 1000000,
             jxmax = -1000000,
@@ -299,8 +108,8 @@ export class FMMSolver {
             jzmax = -1000000;
         // Calculate the minimum and maximum of boxIndex3D
         for (let jj = 0; jj < numBoxIndex; jj++) {
-            let jb = jj + this.levelOffset[numLevel - 1];
-            let boxIndex3D = this.unmorton(this.boxIndexFull[jb]);
+            let jb = jj + tree.levelOffset[numLevel - 1];
+            let boxIndex3D = this.unmorton(tree.boxIndexFull[jb]);
             jxmin = Math.min(jxmin, boxIndex3D.x);
             jxmax = Math.max(jxmax, boxIndex3D.x);
             jymin = Math.min(jymin, boxIndex3D.y);
@@ -311,9 +120,9 @@ export class FMMSolver {
 
         //p2p
         for (let ii = 0; ii < numBoxIndex; ii++) {
-            let ib = ii + this.levelOffset[numLevel - 1];
-            this.numInteraction[ii] = 0;
-            let boxIndex3D = this.unmorton(this.boxIndexFull[ib]);
+            let ib = ii + tree.levelOffset[numLevel - 1];
+            tree.numInteraction[ii] = 0;
+            let boxIndex3D = this.unmorton(tree.boxIndexFull[ib]);
             let ix = boxIndex3D.x;
             let iy = boxIndex3D.y;
             let iz = boxIndex3D.z;
@@ -324,10 +133,10 @@ export class FMMSolver {
                         boxIndex3D.y = jy;
                         boxIndex3D.z = jz;
                         let boxIndex = this.morton1(boxIndex3D, numLevel);
-                        let jj = this.boxIndexMask[boxIndex];
+                        let jj = tree.boxIndexMask[boxIndex];
                         if (jj != -1) {
-                            this.interactionList[ii][this.numInteraction[ii]] = jj;
-                            this.numInteraction[ii]++;
+                            this.interactionList[ii][tree.numInteraction[ii]] = jj;
+                            tree.numInteraction[ii]++;
                         }
                     }
                 }
@@ -335,6 +144,7 @@ export class FMMSolver {
         }
     }
     getInteractionListM2L(numBoxIndex: number, numLevel: number) {
+        const tree = this.tree;
         // Initialize the minimum and maximum values
         let jxmin = 1000000,
             jxmax = -1000000,
@@ -344,8 +154,8 @@ export class FMMSolver {
             jzmax = -1000000;
         // Calculate the minimum and maximum of boxIndex3D
         for (let jj = 0; jj < numBoxIndex; jj++) {
-            let jb = jj + this.levelOffset[numLevel - 1];
-            let boxIndex3D = this.unmorton(this.boxIndexFull[jb]);
+            let jb = jj + tree.levelOffset[numLevel - 1];
+            let boxIndex3D = this.unmorton(tree.boxIndexFull[jb]);
             jxmin = Math.min(jxmin, boxIndex3D.x);
             jxmax = Math.max(jxmax, boxIndex3D.x);
             jymin = Math.min(jymin, boxIndex3D.y);
@@ -355,27 +165,28 @@ export class FMMSolver {
         }
 
         for (let ii = 0; ii < numBoxIndex; ii++) {
-            let ib = ii + this.levelOffset[numLevel - 1];
-            this.numInteraction[ii] = 0;
-            let boxIndex3D = this.unmorton(this.boxIndexFull[ib]);
+            let ib = ii + tree.levelOffset[numLevel - 1];
+            tree.numInteraction[ii] = 0;
+            let boxIndex3D = this.unmorton(tree.boxIndexFull[ib]);
             let ix = boxIndex3D.x,
                 iy = boxIndex3D.y,
                 iz = boxIndex3D.z;
             for (let jj = 0; jj < numBoxIndex; jj++) {
-                let jb = jj + this.levelOffset[numLevel - 1];
-                boxIndex3D = this.unmorton(this.boxIndexFull[jb]);
+                let jb = jj + tree.levelOffset[numLevel - 1];
+                boxIndex3D = this.unmorton(tree.boxIndexFull[jb]);
                 let jx = boxIndex3D.x,
                     jy = boxIndex3D.y,
                     jz = boxIndex3D.z;
                 if (jx < ix - 1 || ix + 1 < jx || jy < iy - 1 || iy + 1 < jy || jz < iz - 1 || iz + 1 < jz) {
-                    this.interactionList[ii][this.numInteraction[ii]] = jj;
-                    this.numInteraction[ii]++;
+                    this.interactionList[ii][tree.numInteraction[ii]] = jj;
+                    tree.numInteraction[ii]++;
                 }
             }
         }
 
     }
     getInteractionListM2LLower(numBoxIndex: number, numLevel: number) {
+        const tree = this.tree;
         // Initialize the minimum and maximum values
         let jxmin = 1000000,
             jxmax = -1000000,
@@ -385,8 +196,8 @@ export class FMMSolver {
             jzmax = -1000000;
         // Calculate the minimum and maximum of boxIndex3D
         for (let jj = 0; jj < numBoxIndex; jj++) {
-            let jb = jj + this.levelOffset[numLevel - 1];
-            let boxIndex3D = this.unmorton(this.boxIndexFull[jb]);
+            let jb = jj + tree.levelOffset[numLevel - 1];
+            let boxIndex3D = this.unmorton(tree.boxIndexFull[jb]);
             jxmin = Math.min(jxmin, boxIndex3D.x);
             jxmax = Math.max(jxmax, boxIndex3D.x);
             jymin = Math.min(jymin, boxIndex3D.y);
@@ -395,9 +206,9 @@ export class FMMSolver {
             jzmax = Math.max(jzmax, boxIndex3D.z);
         }
         for (let ii = 0; ii < numBoxIndex; ii++) {
-            let ib = ii + this.levelOffset[numLevel - 1];
-            this.numInteraction[ii] = 0;
-            let boxIndex3D = this.unmorton(this.boxIndexFull[ib]);
+            let ib = ii + tree.levelOffset[numLevel - 1];
+            tree.numInteraction[ii] = 0;
+            let boxIndex3D = this.unmorton(tree.boxIndexFull[ib]);
             let ix = boxIndex3D.x,
                 iy = boxIndex3D.y,
                 iz = boxIndex3D.z;
@@ -415,10 +226,10 @@ export class FMMSolver {
                                         boxIndex3D.y = jy;
                                         boxIndex3D.z = jz;
                                         let boxIndex = this.morton1(boxIndex3D, numLevel);
-                                        let jj = this.boxIndexMask[boxIndex];
+                                        let jj = tree.boxIndexMask[boxIndex];
                                         if (jj != -1) {
-                                            this.interactionList[ii][this.numInteraction[ii]] = jj;
-                                            this.numInteraction[ii]++;
+                                            this.interactionList[ii][tree.numInteraction[ii]] = jj;
+                                            tree.numInteraction[ii]++;
                                         }
                                     }
                                 }
@@ -433,27 +244,29 @@ export class FMMSolver {
     }
     kernel: IKernel;
     async main() {
-        this.setBoxSize();
-        this.setOptimumLevel();
-        this.sortParticles();
-        this.countNonEmptyBoxes();
-        this.allocate();
-        let numLevel = this.maxLevel;
-        this.levelOffset[numLevel - 1] = 0;
+        // this.setBoxSize();
+        // this.setOptimumLevel();
+        // this.sortParticles();
+        // this.countNonEmptyBoxes();
+        // this.allocate();
+        //this.interactionList = new Array(this.numBoxIndexLeaf).fill(0).map(_ => new Int32Array(maxM2LInteraction));
+        const tree = this.tree;
+        let numLevel = tree.maxLevel;
+        tree.levelOffset[numLevel - 1] = 0;
         //     kernel.precalc();
-        let numBoxIndex = this.getBoxData();
+        let numBoxIndex = 0;
         //   // P2P
         this.getInteractionListP2P(numBoxIndex, numLevel);
         //     bodyAccel.fill(0);
 
-        await this.kernel.Init(this.particleBuffer);
+        await this.kernel.Init(tree.nodeBuffer);
         //     kernel.p2p(numBoxIndex);
-        await this.kernel.p2p(numBoxIndex, this.interactionList, this.numInteraction, this.particleOffset);
+        await this.kernel.p2p(numBoxIndex, this.interactionList, tree.numInteraction, tree.particleOffset);
 
-        await this.kernel.p2m(numBoxIndex, this.particleOffset);
+        await this.kernel.p2m(numBoxIndex, tree.particleOffset);
 
-        if (this.maxLevel > 2) {
-            for (numLevel = this.maxLevel - 1; numLevel >= 2; numLevel--) {
+        if (tree.maxLevel > 2) {
+            for (numLevel = tree.maxLevel - 1; numLevel >= 2; numLevel--) {
                 let numBoxIndexOld = numBoxIndex;
                 numBoxIndex = this.getBoxDataOfParent(numBoxIndex, numLevel);
                 await this.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
@@ -466,11 +279,11 @@ export class FMMSolver {
         this.getInteractionListM2L(numBoxIndex, numLevel);
         await this.kernel.m2l(numBoxIndex, numLevel);
 
-        if (this.maxLevel > 2) {
+        if (tree.maxLevel > 2) {
 
-            for (numLevel = 3; numLevel <= this.maxLevel; numLevel++) {
+            for (numLevel = 3; numLevel <= tree.maxLevel; numLevel++) {
 
-                numBoxIndex = this.levelOffset[numLevel - 2] - this.levelOffset[numLevel - 1];
+                numBoxIndex = tree.levelOffset[numLevel - 2] - tree.levelOffset[numLevel - 1];
 
                 await this.kernel.l2l(numBoxIndex, numLevel);
 
@@ -480,7 +293,7 @@ export class FMMSolver {
 
                 await this.kernel.m2l(numBoxIndex, numLevel);
             }
-            numLevel = this.maxLevel;
+            numLevel = tree.maxLevel;
         }
 
         await this.kernel.l2p(numBoxIndex);
@@ -494,14 +307,17 @@ export class FMMSolver {
     numCoefficients: number;
     DnmSize: number;
 
-    constructor(particleBuffer: Float32Array, kernelName: string) {
-        const TKernel = { "wgpu": KernelWgpu, "ts": KernelTs }[kernelName];
+    tree: TreeBuilder;
+
+    constructor(tree: TreeBuilder, kernelName: string) {
+        const TKernel = {
+            "wgpu": null//KernelWgpu,
+            // "ts": KernelTs
+        }[kernelName];
         if (!TKernel) throw "Unknown Kernel: " + kernelName;
         console.log("Create with kernel: " + kernelName);
-        this.kernel = new TKernel(this);
-        this.particleBuffer = particleBuffer;
-        this.particleCount = particleBuffer.length / 4;
-
+        //this.kernel = new TKernel(this);
+        this.tree = tree;
 
         // constants
         this.numExpansions = 10;
