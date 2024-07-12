@@ -165,13 +165,13 @@ export class NodeLinkRenderer {
                             // The destination color is the color from the image in the framebuffer.
                             // https://www.khronos.org/opengl/wiki/Blending
                             color: {
-                                srcFactor: 'src',
-                                dstFactor: 'zero',
+                                srcFactor: 'one',
+                                dstFactor: 'one-minus-src-alpha',
                                 operation: 'add',
                             },
                             alpha: {
-                                srcFactor: 'zero',
-                                dstFactor: 'one',
+                                srcFactor: 'one',
+                                dstFactor: 'one-minus-src-alpha',
                                 operation: 'add',
                             }
                         },

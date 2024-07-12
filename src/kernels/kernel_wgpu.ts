@@ -65,6 +65,7 @@ export class KernelWgpu implements IKernel {
   constructor(core: FMMSolver) {
     this.debug = false;
     this.core = core;
+    this.dataReady = false;
   }
   adapter: GPUAdapter;
   device: GPUDevice;
@@ -90,9 +91,9 @@ export class KernelWgpu implements IKernel {
   debug_info: any;
 
   shaders: any;
-  async Init(particleBuffer: Float32Array) {
+  async Init(nodeBuffer: Float32Array) {
     const core = this.core;
-    this.particleCount = particleBuffer.length / 4;
+    this.particleCount = nodeBuffer.length / 4;
     this.accelBuffer = new Float32Array(this.particleCount * 3);
     this.adapter = await navigator.gpu.requestAdapter();
     this.device = await this.adapter.requestDevice();
@@ -103,11 +104,9 @@ export class KernelWgpu implements IKernel {
     // this.cmdBufferLength = this.maxThreadCount * this.maxWorkgroupCount * 2;// to-do: set a good value
     // this.cmdBufferSize = this.cmdBufferLength * SIZEOF_32;
     this.particleBufferGPU = this.device.createBuffer({
-      size: particleBuffer.byteLength,
+      size: nodeBuffer.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
-
-
     this.uniformBufferSize = 16 * SIZEOF_32;// see shader
 
     this.uniformBufferGPU = this.device.createBuffer({
@@ -152,7 +151,7 @@ export class KernelWgpu implements IKernel {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    this.device.queue.writeBuffer(this.particleBufferGPU, 0, particleBuffer);
+    this.device.queue.writeBuffer(this.particleBufferGPU, 0, nodeBuffer);
 
     this.shaders = {
       p2p: wgsl_p2p,
@@ -467,12 +466,14 @@ export class KernelWgpu implements IKernel {
   }
   Dnm: Float32Array;
   // Ynm: Float32Array;
-  async p2p(numBoxIndex: number, interactionList: any, numInteraction: any, particleOffset: any) {
+  async p2p(numInteraction, interactionList) {
     if (this.debug) {
       this.debug_p2p_call_count = 0;
       this.debug_info["events"] = [];
       this.debug_info["events"].push({ time: performance.now(), tag: "start" });
     }
+    const numBoxIndex = this.core.tree.numBoxIndexLeaf;
+    const particleOffset = this.core.tree.particleOffset;
 
     const particleOffsetBuffer = new Uint32Array(numBoxIndex * 2);
     for (let i = 0; i < numBoxIndex; i++) {
@@ -527,15 +528,17 @@ export class KernelWgpu implements IKernel {
     }
 
     if (this.debug) {
-      // await this.readBufferGPU.mapAsync(GPUMapMode.READ);
-      // const handle = this.readBufferGPU.getMappedRange();
-      // this.accelBuffer = new Float32Array(handle);
-      // // this.readBufferGPU.unmap();
+      await this.readBufferGPU.mapAsync(GPUMapMode.READ);
+      const handle = this.readBufferGPU.getMappedRange();
+      this.accelBuffer = new Float32Array(handle);
+      // this.readBufferGPU.unmap();
       console.log(`debug_p2p_call_count: ${this.debug_p2p_call_count}`);
+      console.log(this.accelBuffer);
       const startTime = this.debug_info["events"][0].time;
       this.debug_info["events"].forEach(o => o.time -= startTime);
       //console.log(JSON.stringify(this.debug_info))
       console.log(this.debug_info);
+      this.readBufferGPU.unmap();
     }
   }
 
@@ -552,11 +555,13 @@ export class KernelWgpu implements IKernel {
       0,
       uniformBuffer
     );
+
     //console.log(cmdBuffer); throw "pause";
     await this.RunCompute("p2p",
       [this.uniformBufferGPU, this.particleBufferGPU, this.resultBufferGPU, this.commandBufferGPU, this.particleOffsetGPU],
       this.maxWorkgroupCount, this.resultBufferGPU, [this.resultBufferGPU]
     );
+
     //console.log("applyaccel");
     await this.readBufferGPU.mapAsync(GPUMapMode.READ);
     const handle = this.readBufferGPU.getMappedRange();
@@ -570,6 +575,7 @@ export class KernelWgpu implements IKernel {
       this.accelBuffer[index * 3 + 2] += tempAccelBuffer[i * 3 + 2];
     }
     this.readBufferGPU.unmap();
+
   }
 
   /** only for debug. complex [numBoxIndexTotal][numCoefficients] */
@@ -577,8 +583,8 @@ export class KernelWgpu implements IKernel {
   /** only for debug. complex [numBoxIndexLeaf][numCoefficients] */
   Lnm: Array<Float32Array>;
   factorial: Float32Array;
-  async p2m(numBoxIndex: number, particleOffset: any) {
-    const core=this.core;
+  async p2m() {
+    const core = this.core;
 
     let fact = 1.0;
     let factorial = new Float32Array(2 * this.core.numExpansions);
@@ -588,7 +594,7 @@ export class KernelWgpu implements IKernel {
     }
     this.device.queue.writeBuffer(this.factorialGPU, 0, factorial);
     this.factorial = factorial;
-
+    const numBoxIndex = this.core.tree.numBoxIndexLeaf;
 
     // command (boxId)
     let command = new Uint32Array(numBoxIndex);
@@ -598,7 +604,7 @@ export class KernelWgpu implements IKernel {
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, numBoxIndex);
 
     const boxSize = core.tree.rootBoxSize / (1 << core.tree.maxLevel);
-
+    const particleOffset = core.tree.particleOffset;
     let maxParticlePerBox = 0;
     for (let jj = 0; jj < numBoxIndex; jj++) {
       let c = particleOffset[1][jj] - particleOffset[0][jj] + 1;
@@ -621,7 +627,6 @@ export class KernelWgpu implements IKernel {
       [this.uniformBufferGPU, this.particleBufferGPU, this.mnmBufferGPU, this.commandBufferGPU, this.particleOffsetGPU, this.factorialGPU],
       numBoxIndex, this.mnmBufferGPU
     );
-
     if (this.debug) {
       console.log("debug p2m");
       await this.readBufferGPU.mapAsync(GPUMapMode.READ);
@@ -638,7 +643,7 @@ export class KernelWgpu implements IKernel {
       this.readBufferGPU.unmap();
       //console.log(this.Mnm)
     }
-
+    //throw "pause"
   }
 
   async m2m(numBoxIndex: number, numBoxIndexOld: number, numLevel: number) {
@@ -878,7 +883,7 @@ export class KernelWgpu implements IKernel {
     const core = this.core;
     const commandLength = 4;//
     let command = new Int32Array(commandLength * numBoxIndex);
-    let boxSize =core.tree.rootBoxSize / (1 << core.tree.maxLevel);
+    let boxSize = core.tree.rootBoxSize / (1 << core.tree.maxLevel);
     const threadsPerGroup = 256;
     // loop foreach box set group
     let groupCount = 0;

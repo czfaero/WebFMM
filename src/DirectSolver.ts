@@ -26,7 +26,7 @@ export class DirectSolver {
         this.nodeBuffer = tree.nodeBuffer;
         this.tree = tree;
         this.nodeCount = this.nodeBuffer.length / 4;
-        //this.useWgpu = true;
+        this.useWgpu = true;
     }
 
 
@@ -43,7 +43,7 @@ export class DirectSolver {
 
 
 
-    getParticle(i: number) {
+    getNode(i: number) {
         return {
             x: this.nodeBuffer[i * 4],
             y: this.nodeBuffer[i * 4 + 1],
@@ -142,10 +142,10 @@ export class DirectSolver {
         const accelBuffer = new Float32Array(this.nodeCount * 3);
         for (let i = 0; i < this.nodeCount; i++) {
             let ax = 0, ay = 0, az = 0;
-            const p1 = this.getParticle(i);
+            const p1 = this.getNode(i);
             for (let j = 0; j < this.nodeCount; j++) {
                 if (i == j) continue;
-                const p2 = this.getParticle(j);
+                const p2 = this.getNode(j);
                 let dx = p1.x - p2.x,
                     dy = p1.y - p2.y,
                     dz = p1.z - p2.z;
@@ -159,6 +159,11 @@ export class DirectSolver {
             accelBuffer[i * 3 + 1] = -inv4PI * ay;
             accelBuffer[i * 3 + 2] = -inv4PI * az;
         }
-        this.accelBuffer=accelBuffer;
+        this.accelBuffer = accelBuffer;
+    }
+
+    debug_Calc_box(box_src, box2_dst) {
+        this.tree.boxIndexFull
+
     }
 }

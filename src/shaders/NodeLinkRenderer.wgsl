@@ -25,7 +25,7 @@ fn main_node_vert(
   let wordPos = npos + size * (right * quadPos.x + up * quadPos.y);
   output.Position = uniforms.viewProjectionMatrix * vec4(wordPos, 1.0);
   // var normal = vec3(quadPos, sqrt(1 - dot(quadPos, quadPos)));
-  output.color = color;
+  output.color = color * node.w;
   output.quadPos = quadPos;
   return output;
 }
@@ -38,8 +38,9 @@ fn main_node_frag(
 ) -> @location(0) vec4<f32> {
   var l = 1 - dot(quadPos, quadPos);
   var r : f32 = sign(l);
+  var a = 0.5f;
   if(r < 0) { discard; }
-  return vec4<f32>(color * sqrt(l), 1);
+  return vec4<f32>(color * sqrt(l)*a , a);// premultiplied
 }
 
 /// Links

@@ -6,12 +6,12 @@ export class TreeBuilder {
     linkBuffer: Uint32Array;
     particleCount: number;
     getNode(i: number) {
-        const particleBuffer = this.nodeBuffer;
+        const nodeBuffer = this.nodeBuffer;
         return {
-            x: particleBuffer[i * 4],
-            y: particleBuffer[i * 4 + 1],
-            z: particleBuffer[i * 4 + 2],
-            w: particleBuffer[i * 4 + 3]
+            x: nodeBuffer[i * 4],
+            y: nodeBuffer[i * 4 + 1],
+            z: nodeBuffer[i * 4 + 2],
+            w: nodeBuffer[i * 4 + 3]
         }
     }
     boxMinX: number;
@@ -136,7 +136,7 @@ export class TreeBuilder {
 
             // debug: viusalize box 
             //tempColor.set(sortValue[i] == 7 ? [1, 1, 1] : [0, 0, 0], i * 3);
-            tempColor.set( [1, 1, 0], i * 3);
+            tempColor.set([1, 1, 0], i * 3);
 
 
             inverseSortIndex[sortIndex[i]] = i;
@@ -176,7 +176,7 @@ export class TreeBuilder {
     }
     levelOffset: Int32Array;
     /**
-     * first and last particle in each box
+     * first and last particle in each box, by non-empty id
      * int[2][numBoxIndexLeaf]
      */
     particleOffset: any;
@@ -243,7 +243,43 @@ export class TreeBuilder {
 
         //     kernel.precalc();
         let numBoxIndex = this.getBoxData(mortonIndex);
+        console.log(this)
+        console.log(numBoxIndex)
         //console.log(this.particleOffset)
+
+    }
+    debug_watch: any;
+
+    // box id by non-empty
+    debug_restrict_nodes(box_ids: Array<number>, inbox_indexs: Array<number> = []) {
+        console.log("debug: restrict nodes");
+        this.debug_watch = [];
+
+        for (let i = 0; i < this.numBoxIndexLeaf; i++) {
+            if (box_ids.includes(i)) {
+                if (inbox_indexs != null && inbox_indexs.length > 0) {
+                    for (let j = this.particleOffset[0][i]; j <= this.particleOffset[1][i]; j++) {
+                        if (inbox_indexs.includes(j - this.particleOffset[0][i])) {
+                            this.nodeBuffer[j * 4 + 3] = 1;
+                            this.debug_watch.push({ index: j, box: i, value: this.getNode(j) });
+                        } else {
+                            this.nodeBuffer[j * 4 + 3] = 0;
+                        }
+                    }
+                } else {
+                    for (let j = this.particleOffset[0][i]; j <= this.particleOffset[1][i]; j++) {
+                        this.nodeBuffer[j * 4 + 3] = 1;
+                    }
+                }
+
+                continue;
+            }
+            for (let j = this.particleOffset[0][i]; j <= this.particleOffset[1][i]; j++) {
+                this.nodeBuffer[j * 4 + 3] = 0;
+            }
+        }
+        console.log(this.debug_watch);
+
     }
 
 

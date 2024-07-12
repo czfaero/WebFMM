@@ -1,9 +1,11 @@
 import wgsl from './shaders/FMM.wgsl';
 
 import { IKernel } from './kernels/kernel';
-//import { KernelWgpu } from './kernels/kernel_wgpu';
+import { KernelWgpu } from './kernels/kernel_wgpu';
 //import { KernelTs } from './kernels/kernel_ts';
 import { TreeBuilder } from './TreeBuilder';
+
+import { debug_p2m } from './debug_p2m';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -212,9 +214,9 @@ export class FMMSolver {
             let ix = boxIndex3D.x,
                 iy = boxIndex3D.y,
                 iz = boxIndex3D.z;
-            let ixp = (ix + 2) / 2,
-                iyp = (iy + 2) / 2,
-                izp = (iz + 2) / 2;
+            let ixp = Math.floor((ix + 2) / 2),
+                iyp = Math.floor((iy + 2) / 2),
+                izp = Math.floor((iz + 2) / 2);
             for (let jxp = ixp - 1; jxp <= ixp + 1; jxp++) {
                 for (let jyp = iyp - 1; jyp <= iyp + 1; jyp++) {
                     for (let jzp = izp - 1; jzp <= izp + 1; jzp++) {
@@ -259,11 +261,23 @@ export class FMMSolver {
         this.getInteractionListP2P(numBoxIndex, numLevel);
         //     bodyAccel.fill(0);
 
-        await this.kernel.Init(tree.nodeBuffer);
-        //     kernel.p2p(numBoxIndex);
-        await this.kernel.p2p(numBoxIndex, this.interactionList, tree.numInteraction, tree.particleOffset);
 
-        await this.kernel.p2m(numBoxIndex, tree.particleOffset);
+
+        await this.kernel.Init(tree.nodeBuffer);
+
+        // debug
+        {
+            const p2m_result = tree.debug_watch.map(info => {
+                return debug_p2m(this, info.box, tree)
+            })
+            console.log(p2m_result)
+
+        }
+
+        //     kernel.p2p(numBoxIndex);
+        await this.kernel.p2p(tree.numInteraction, this.interactionList);
+
+        await this.kernel.p2m();
 
         if (tree.maxLevel > 2) {
             for (numLevel = tree.maxLevel - 1; numLevel >= 2; numLevel--) {
@@ -276,6 +290,7 @@ export class FMMSolver {
         else {
             this.getBoxIndexMask(numBoxIndex, numLevel);
         }
+        console.log(numBoxIndex)
         this.getInteractionListM2L(numBoxIndex, numLevel);
         await this.kernel.m2l(numBoxIndex, numLevel);
 
@@ -309,14 +324,14 @@ export class FMMSolver {
 
     tree: TreeBuilder;
 
-    constructor(tree: TreeBuilder, kernelName: string) {
+    constructor(tree: TreeBuilder, kernelName: string = "wgpu") {
         const TKernel = {
-            "wgpu": null//KernelWgpu,
+            "wgpu": KernelWgpu,
             // "ts": KernelTs
         }[kernelName];
         if (!TKernel) throw "Unknown Kernel: " + kernelName;
         console.log("Create with kernel: " + kernelName);
-        //this.kernel = new TKernel(this);
+        this.kernel = new TKernel(this);
         this.tree = tree;
 
         // constants
@@ -325,6 +340,10 @@ export class FMMSolver {
         this.numExpansion4 = this.numExpansion2 * this.numExpansion2;
         this.numCoefficients = this.numExpansions * (this.numExpansions + 1) / 2;
         this.DnmSize = (4 * this.numExpansion2 * this.numExpansions - this.numExpansions) / 3;
+    }
+
+    isDataReady() {
+        return this.kernel.dataReady;
     }
 
 }
