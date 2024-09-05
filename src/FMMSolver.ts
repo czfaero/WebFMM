@@ -253,12 +253,11 @@ export class FMMSolver {
         // this.allocate();
         //this.interactionList = new Array(this.numBoxIndexLeaf).fill(0).map(_ => new Int32Array(maxM2LInteraction));
         const tree = this.tree;
-        let numLevel = tree.maxLevel;
-        tree.levelOffset[numLevel - 1] = 0;
+        tree.levelOffset[tree.maxLevel - 1] = 0;
         //     kernel.precalc();
         let numBoxIndex = 0;
         //   // P2P
-        this.getInteractionListP2P(numBoxIndex, numLevel);
+        this.getInteractionListP2P(numBoxIndex, tree.maxLevel);
         //     bodyAccel.fill(0);
 
 
@@ -280,19 +279,21 @@ export class FMMSolver {
         await this.kernel.p2m();
 
         if (tree.maxLevel > 2) {
-            for (numLevel = tree.maxLevel - 1; numLevel >= 2; numLevel--) {
+            for (let numLevel = tree.maxLevel - 1; numLevel >= 2; numLevel--) {
                 let numBoxIndexOld = numBoxIndex;
                 numBoxIndex = this.getBoxDataOfParent(numBoxIndex, numLevel);
                 await this.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
             }
-            numLevel = 2;
+            //numLevel = 2;
         }
         else {
-            this.getBoxIndexMask(numBoxIndex, numLevel);
+            this.getBoxIndexMask(numBoxIndex, tree.maxLevel);
         }
         console.log(numBoxIndex)
-        this.getInteractionListM2L(numBoxIndex, numLevel);
+        this.getInteractionListM2L(numBoxIndex,2);
+        throw "pause"
         await this.kernel.m2l(numBoxIndex, numLevel);
+        throw "pause"
 
         if (tree.maxLevel > 2) {
 
@@ -344,6 +345,9 @@ export class FMMSolver {
 
     isDataReady() {
         return this.kernel.dataReady;
+    }
+    getAccelBuffer(){
+        throw "pause";
     }
 
 }

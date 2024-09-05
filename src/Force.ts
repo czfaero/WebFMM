@@ -8,7 +8,7 @@ const delta = 0.2;//delta time ^2
 var solver: any;
 var next = false;
 const stepMode = false;
-const maxIter = 5000;
+const maxIter = 0;
 const msg = document.querySelector("#msg") as HTMLSpanElement;
 
 let tree: TreeBuilder;
@@ -81,9 +81,9 @@ export function DataUpdate(
         }
 
         for (let i = 0; i < nodeBuffer.length / 4; i++) {
-            nodeBuffer[i * 4 + 0] += accelBuffer[i * 3 + 0] * delta;
-            nodeBuffer[i * 4 + 1] += accelBuffer[i * 3 + 1] * delta;
-            nodeBuffer[i * 4 + 2] += accelBuffer[i * 3 + 2] * delta;
+            // nodeBuffer[i * 4 + 0] += accelBuffer[i * 3 + 0] * delta;
+            // nodeBuffer[i * 4 + 1] += accelBuffer[i * 3 + 1] * delta;
+            // nodeBuffer[i * 4 + 2] += accelBuffer[i * 3 + 2] * delta;
         }
 
 
@@ -92,26 +92,26 @@ export function DataUpdate(
         device.queue.writeBuffer(nodeBufferGPU, 0, nodeBuffer);
         solver = null;
         msg.innerHTML = "iter: " + iterCount;
-       // if (iterCount == 1) { RecordVideo() }
+        // if (iterCount == 1) { RecordVideo() }
     }
     if (!stepMode || next) {
-        next = false;
-        if (iterCount > maxIter) { solver = null; return; }
-        //solver = new FMMSolver(nodeBuffer, "wgpu");
-        tree = new TreeBuilder(nodeBuffer, linkBuffer, colorBuffer);
-        // device.queue.writeBuffer(linkBufferGPU, 0, linkBuffer);
-        // device.queue.writeBuffer(colorBufferGPU, 0, colorBuffer);
-        // device.queue.writeBuffer(nodeBufferGPU, 0, nodeBuffer);
-        solver = new DirectSolver(tree);
-        solver.main();
-        iterCount++;
+        if (solver == null) {
+            next = false;
+            if (iterCount > maxIter) { solver = null; return; }
+            tree = new TreeBuilder(nodeBuffer, linkBuffer, colorBuffer);
+            tree.debug_restrict_nodes([0, 15], [0]);
+            //tree.debug_restrict_nodes([0, 15]);
+            //solver = new DirectSolver(tree);
+            solver = new FMMSolver(tree);
+            //solver.debug = true;
+            //solver.kernel.debug=true;
+           
+            solver.main();
+            iterCount++;
+        }
     }
 
-
     //solver.kernel.debug = true;
-
-
-
 }
 
 function RecordVideo() {
