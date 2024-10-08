@@ -67,37 +67,9 @@ export class FMMSolver {
     interactionList: any;
 
 
-    // Propagate non-empty/full link list to parent boxes
-    getBoxDataOfParent(_numBoxIndex: number, numLevel: number) {
-        const tree = this.tree;
-        tree.levelOffset[numLevel - 1] = tree.levelOffset[numLevel] + _numBoxIndex;
-        let numBoxIndexOld = _numBoxIndex;
-        let numBoxIndex = 0;
-        let currentIndex = -1;
-        for (let i = 0; i < tree.numBoxIndexFull; i++)
-            tree.boxIndexMask[i] = -1;
-        for (let i = 0; i < numBoxIndexOld; i++) {
-            let boxIndex = i + tree.levelOffset[numLevel];
-            if (currentIndex != Math.floor(tree.boxIndexFull[boxIndex] / 8)) {
-                currentIndex = Math.floor(tree.boxIndexFull[boxIndex] / 8);
-                tree.boxIndexMask[currentIndex] = numBoxIndex;
-                tree.boxIndexFull[numBoxIndex + tree.levelOffset[numLevel - 1]] = currentIndex;
-                numBoxIndex++;
-            }
-        }
-        return numBoxIndex;
-    }
 
-    // Recalculate non-empty box index for current level
-    getBoxIndexMask(numBoxIndex: number, numLevel: number) {
-        const tree = this.tree;
-        for (let i = 0; i < tree.numBoxIndexFull; i++)
-            tree.boxIndexMask[i] = -1;
-        for (let i = 0; i < numBoxIndex; i++) {
-            let boxIndex = i + tree.levelOffset[numLevel - 1];
-            tree.boxIndexMask[tree.boxIndexFull[boxIndex]] = i;
-        }
-    }
+
+
 
     getInteractionListP2P(numBoxIndex: number, numLevel: number) {
         const tree = this.tree;
@@ -253,7 +225,7 @@ export class FMMSolver {
         // this.allocate();
         //this.interactionList = new Array(this.numBoxIndexLeaf).fill(0).map(_ => new Int32Array(maxM2LInteraction));
         const tree = this.tree;
-        tree.levelOffset[tree.maxLevel - 1] = 0;
+
         //     kernel.precalc();
         let numBoxIndex = 0;
         //   // P2P
@@ -281,35 +253,37 @@ export class FMMSolver {
         if (tree.maxLevel > 2) {
             for (let numLevel = tree.maxLevel - 1; numLevel >= 2; numLevel--) {
                 let numBoxIndexOld = numBoxIndex;
-                numBoxIndex = this.getBoxDataOfParent(numBoxIndex, numLevel);
-                await this.kernel.m2m(numBoxIndex, numBoxIndexOld, numLevel);
+                //numBoxIndex = tree.getBoxDataOfParent(numBoxIndex, numLevel);
+                // todo
+                await this.kernel.m2m(numLevel);
             }
             //numLevel = 2;
         }
         else {
-            this.getBoxIndexMask(numBoxIndex, tree.maxLevel);
+            tree.getBoxIndexMask(numBoxIndex, tree.maxLevel);
         }
         console.log(numBoxIndex)
-        this.getInteractionListM2L(numBoxIndex,2);
+        this.getInteractionListM2L(numBoxIndex, 2);
         throw "pause"
-        await this.kernel.m2l(numBoxIndex, numLevel);
+        // await this.kernel.m2l(numBoxIndex, numLevel);
+        await this.kernel.m2l(numBoxIndex, 2);
         throw "pause"
 
         if (tree.maxLevel > 2) {
 
-            for (numLevel = 3; numLevel <= tree.maxLevel; numLevel++) {
+            for (let numLevel = 3; numLevel <= tree.maxLevel; numLevel++) {
 
                 numBoxIndex = tree.levelOffset[numLevel - 2] - tree.levelOffset[numLevel - 1];
 
                 await this.kernel.l2l(numBoxIndex, numLevel);
 
-                this.getBoxIndexMask(numBoxIndex, numLevel);
+                tree.getBoxIndexMask(numBoxIndex, numLevel);
 
                 this.getInteractionListM2LLower(numBoxIndex, numLevel);
 
                 await this.kernel.m2l(numBoxIndex, numLevel);
             }
-            numLevel = tree.maxLevel;
+            // numLevel = tree.maxLevel;
         }
 
         await this.kernel.l2p(numBoxIndex);
@@ -346,7 +320,7 @@ export class FMMSolver {
     isDataReady() {
         return this.kernel.dataReady;
     }
-    getAccelBuffer(){
+    getAccelBuffer() {
         throw "pause";
     }
 

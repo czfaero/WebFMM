@@ -646,8 +646,12 @@ export class KernelWgpu implements IKernel {
     //throw "pause"
   }
 
-  async m2m(numBoxIndex: number, numBoxIndexOld: number, numLevel: number) {
+  async m2m(numLevel: number) {
     const core = this.core;
+
+    //?
+    const numBoxIndexOld = core.tree.levelOffset[numLevel] - core.tree.levelOffset[numLevel + 1];
+
     let command = new Int32Array(numBoxIndexOld * 3);
     const boxPerGroup = 1;
     const commandLength = 3;
