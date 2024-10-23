@@ -62,7 +62,6 @@ export class TreeBuilder {
         }
 
         this.numBoxIndexFull = 1 << 3 * this.maxLevel;
-        console.log(`maxLevel:${this.maxLevel} | BoxFull: ${this.numBoxIndexFull}`);
     };
 
     /**@return Array, box id for every partical*/
@@ -167,7 +166,9 @@ export class TreeBuilder {
             currentIndex = -1;
             for (let i = 0; i < this.particleCount; i++) {
                 const temp = Math.floor(sortValue[i] / (1 << 3 * (this.maxLevel - numLevel)));
+                //console.log("temp-index",temp-currentIndex)
                 if (temp != currentIndex) {
+
                     this.numBoxIndexTotal++;
                     currentIndex = temp;
                 }
@@ -255,7 +256,7 @@ export class TreeBuilder {
 
     // Recalculate non-empty box index for current level
     getBoxIndexMask(numBoxIndex: number, numLevel: number) {
-        console.log(`get Mask ${numLevel}`);
+        //console.log(`get Mask ${numLevel}`);
         const tree = this;
         for (let i = 0; i < tree.numBoxIndexFull; i++)
             tree.boxIndexMask[i] = -1;
@@ -285,8 +286,7 @@ export class TreeBuilder {
         this.levelOffset[this.maxLevel - 1] = 0;
         //     kernel.precalc();
         let numBoxIndex = this.getBoxData(mortonIndex);
-        console.log(this)
-        console.log(numBoxIndex)
+
         //console.log(this.particleOffset)
         this.levelOffset[this.maxLevel - 2] = numBoxIndex;
 
@@ -294,9 +294,26 @@ export class TreeBuilder {
             this.getBoxDataOfParent(level);
         }
 
+
+        console.log(`-- Tree info --
+particleCount                 : ${this.particleCount}
+maxLevel                      : ${this.maxLevel} 
+BoxIndexFull=1<<3*maxLevel    : ${this.numBoxIndexFull}
+BoxIndexLeaf={non-empty@max}  : ${this.numBoxIndexLeaf}
+BoxIndexTotal={non-empty@all} : ${this.numBoxIndexTotal}
+levelOffset: ${this.levelOffset}
+  numLevel -> numBoxIndex of max
+  0 -> ? of 8 (fixed)
+${Array.from(this.levelOffset)
+    .map((x, i) => { return i < this.maxLevel - 1 ? `  ${i+1} -> ${x - this.levelOffset[i + 1]} of ${1<<3*(i+2)}` : "" })
+    .join("\n")}
+`);
+        console.log(this);
+
     }
     debug_watch: any;
 
+    // for wgpu debug
     // box id by non-empty
     debug_restrict_nodes(box_ids: Array<number>, inbox_indexs: Array<number> = []) {
         console.log("debug: restrict nodes");

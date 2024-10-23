@@ -139,7 +139,7 @@ function debug_p2m_shader(box: number, index, buffers) {
     // let end = particleOffset[box * 2 + 1];
     let start = particleOffset[0][box];
     let end = particleOffset[1][box];
-    console.log("nodes of box "+box)
+    console.log("nodes of box " + box)
     console.log(particleBuffer.subarray(start * 4, end * 4))
     for (let particleIndex = start; particleIndex <= end; particleIndex++) {
         let particle = getParticle(particleIndex);

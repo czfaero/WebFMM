@@ -13,6 +13,13 @@ const maxM2LInteraction = 189;
 export class FMMSolver {
     // Basic data and helper
 
+    debug_watch_box_ids: Array<Number>;//non-empty id
+
+    debug_p2m_result;
+    debug_m2m_result;
+    debug_m2l_result;
+    debug_l2l_result;
+    debug_l2p_result;
 
     getNode(i: number) {
         return this.tree.getNode(i);
@@ -237,11 +244,11 @@ export class FMMSolver {
         await this.kernel.Init(tree.nodeBuffer);
 
         // debug
-        {
-            const p2m_result = tree.debug_watch.map(info => {
-                return debug_p2m(this, info.box, tree)
+        if (this.debug_watch_box_ids) {
+            this.debug_p2m_result = this.debug_watch_box_ids.map(id => {
+                return debug_p2m(this, id, tree)
             })
-            console.log(p2m_result)
+            console.log(this.debug_p2m_result)
 
         }
 
@@ -264,7 +271,7 @@ export class FMMSolver {
         }
         console.log(numBoxIndex)
         this.getInteractionListM2L(numBoxIndex, 2);
-        throw "pause"
+        throw "pause before m2l"
         // await this.kernel.m2l(numBoxIndex, numLevel);
         await this.kernel.m2l(numBoxIndex, 2);
         throw "pause"

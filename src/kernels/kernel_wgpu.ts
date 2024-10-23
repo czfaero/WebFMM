@@ -98,7 +98,7 @@ export class KernelWgpu implements IKernel {
     this.adapter = await navigator.gpu.requestAdapter();
     this.device = await this.adapter.requestDevice();
     // to-do: check limit
-    console.log(this.adapter);
+    //console.log(this.adapter);
     this.maxThreadCount = 256;
     this.maxWorkgroupCount = 256;
     // this.cmdBufferLength = this.maxThreadCount * this.maxWorkgroupCount * 2;// to-do: set a good value
@@ -650,8 +650,8 @@ export class KernelWgpu implements IKernel {
     const core = this.core;
 
     //?
-    const numBoxIndexOld = core.tree.levelOffset[numLevel] - core.tree.levelOffset[numLevel + 1];
-
+    const numBoxIndexOld = core.tree.levelOffset[numLevel - 1] - core.tree.levelOffset[numLevel];
+    console.log("old", numBoxIndexOld)
     let command = new Int32Array(numBoxIndexOld * 3);
     const boxPerGroup = 1;
     const commandLength = 3;
@@ -715,7 +715,7 @@ export class KernelWgpu implements IKernel {
     );
 
     if (this.debug) {
-      console.log("debug m2m")
+      //console.log("debug m2m")
       await this.readBufferGPU.mapAsync(GPUMapMode.READ);
       const handle = this.readBufferGPU.getMappedRange();
       let tempReadBuffer = new Float32Array(handle);
@@ -728,7 +728,7 @@ export class KernelWgpu implements IKernel {
         this.Mnm[i] = MnmVec;
       }
       this.readBufferGPU.unmap();
-      console.log("Mnm:")
+      //console.log("Mnm:")
       //console.log(this.Mnm);
       //throw "pause after m2m";
     }
@@ -775,7 +775,7 @@ export class KernelWgpu implements IKernel {
       numBoxIndex, this.lnmBufferGPU
     );
     if (this.debug) {
-      console.log("debug m2l")
+      //console.log("debug m2l")
       {
         await this.readBufferGPU.mapAsync(GPUMapMode.READ);
         const handle = this.readBufferGPU.getMappedRange();
@@ -790,8 +790,8 @@ export class KernelWgpu implements IKernel {
             this.Lnm[i] = LnmVec;
           }
         }
-        console.log("Lnm:")
-        console.log(this.Lnm);
+        //console.log("Lnm:")
+        //console.log(this.Lnm);
         this.readBufferGPU.unmap();
       }
       //throw "pause after m2l";
@@ -860,7 +860,7 @@ export class KernelWgpu implements IKernel {
     );
 
     if (this.debug) {
-      console.log("debug l2l")
+      //console.log("debug l2l")
       {
         await this.readBufferGPU.mapAsync(GPUMapMode.READ);
         const handle = this.readBufferGPU.getMappedRange();
@@ -875,8 +875,8 @@ export class KernelWgpu implements IKernel {
             this.Lnm[i] = LnmVec;
           }
         }
-        console.log("Lnm:")
-        console.log(this.Lnm);
+        //console.log("Lnm:")
+        //console.log(this.Lnm);
         this.readBufferGPU.unmap();
       }
       //throw "pause after l2l";

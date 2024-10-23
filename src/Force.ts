@@ -13,9 +13,14 @@ const msg = document.querySelector("#msg") as HTMLSpanElement;
 
 let tree: TreeBuilder;
 
+let debug_watch_box_ids: Array<Number>;//non-empty id
 
-export function DataStart(nodeBuffer: Float32Array,
-    linkBuffer: Uint32Array) {
+export function Data_debug_SetBox(box_ids: Array<Number>) {
+
+    debug_watch_box_ids = box_ids;
+}
+
+export function DataStart() {
     let button = document.querySelector("#button_next") as HTMLButtonElement;
     button.onclick = function () {
         next = true;
@@ -99,13 +104,16 @@ export function DataUpdate(
             next = false;
             if (iterCount > maxIter) { solver = null; return; }
             tree = new TreeBuilder(nodeBuffer, linkBuffer, colorBuffer);
-            tree.debug_restrict_nodes([0, 15], [0]);
+            //tree.debug_restrict_nodes([0, 15], [0]);
             //tree.debug_restrict_nodes([0, 15]);
             //solver = new DirectSolver(tree);
             solver = new FMMSolver(tree);
+            if (debug_watch_box_ids) {
+                solver.debug_watch_box_ids = debug_watch_box_ids;
+            }
             //solver.debug = true;
             //solver.kernel.debug=true;
-           
+
             solver.main();
             iterCount++;
         }
@@ -157,3 +165,5 @@ function RecordVideo() {
     }, 10000);
 
 }
+
+
