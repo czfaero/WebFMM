@@ -1,8 +1,10 @@
+import { FMMSolver } from "./FMMSolver";
 import { TreeBuilder } from "./TreeBuilder";
 const PI = 3.14159265358979323846;
 const inv4PI = 0.25 / PI;
 const eps = 1e-6;
-export function debug_p2m(core, box_id, tree: TreeBuilder) {
+export function debug_p2m(core: FMMSolver, box_id) {
+    const tree = core.tree;
     let fact = 1.0;
     let factorial = new Float32Array(2 * core.numExpansions);
     for (let m = 0; m < factorial.length; m++) {
@@ -34,7 +36,7 @@ export function debug_p2m(core, box_id, tree: TreeBuilder) {
         }
     );
 
-    return { Mnm: r, box: box_id };
+    return r;
 }
 
 

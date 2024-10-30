@@ -7,7 +7,7 @@ import { GetNodes, GetLinks, GetNodeColors } from './diagrams/TestGraph'
 import { FMMSolver } from './FMMSolver';
 
 //import { Tester } from './tester'
-import { DataStart, DataUpdate, Data_debug_SetBox } from './Force';
+import { DataStart, DataUpdate, Data_debug_AddWatch } from './Force';
 
 async function main() {
     if (!navigator.gpu) {
@@ -30,7 +30,7 @@ async function main() {
     // try {
     //     await tester.Test(solver2);
     // } catch (e) { throw e; }
-    Data_debug_SetBox([1, 15]);
+    Data_debug_AddWatch(1, 15);
     DataStart();
     const renderer = new NodeLinkRenderer();
     renderer.setData(nodes, links, colors);

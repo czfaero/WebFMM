@@ -6,6 +6,9 @@ import { KernelWgpu } from './kernels/kernel_wgpu';
 import { TreeBuilder } from './TreeBuilder';
 
 import { debug_p2m } from './debug_p2m';
+import { debug_m2l } from './debug_m2l';
+import { Debug_Id_Pair } from './Force';
+import { debug_l2p } from './debug_l2p';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -13,13 +16,10 @@ const maxM2LInteraction = 189;
 export class FMMSolver {
     // Basic data and helper
 
-    debug_watch_box_ids: Array<Number>;//non-empty id
+    debug_watch_box_id_pairs: Array<Debug_Id_Pair>;//non-empty id
 
-    debug_p2m_result;
-    debug_m2m_result;
-    debug_m2l_result;
-    debug_l2l_result;
-    debug_l2p_result;
+    debug_results;
+
 
     getNode(i: number) {
         return this.tree.getNode(i);
@@ -244,11 +244,69 @@ export class FMMSolver {
         await this.kernel.Init(tree.nodeBuffer);
 
         // debug
-        if (this.debug_watch_box_ids) {
-            this.debug_p2m_result = this.debug_watch_box_ids.map(id => {
-                return debug_p2m(this, id, tree)
-            })
-            console.log(this.debug_p2m_result)
+        if (this.debug_watch_box_id_pairs) {
+            this.debug_results = this.debug_watch_box_id_pairs.map(pair => {
+
+                const p2m_result = debug_p2m(this, pair.src);
+
+                const m2l_result = (() => {
+                    const numLevel = 2;
+                    return debug_m2l(this, numLevel, p2m_result, pair.src, pair.dst);
+                })();
+
+                const l2p_result = debug_l2p(this, m2l_result, pair.dst);
+                let direct_result;
+                // p2p
+                {
+                    const dst_start = tree.particleOffset[0][pair.dst];
+                    const dst_count = tree.particleOffset[1][pair.dst] - dst_start + 1;
+                    const src_start = tree.particleOffset[0][pair.src];
+                    const src_count = tree.particleOffset[1][pair.src] - src_start + 1;
+
+                    direct_result = new Float32Array(dst_count * 3);
+                    function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+                    function inverseSqrt(x) { return 1 / Math.sqrt(x); }
+                    const eps = 1e-6;
+                    const PI = 3.14159265358979323846;
+                    const inv4PI = 0.25 / PI;
+                    for (let dst_i = 0; dst_i < dst_count; dst_i++) {
+
+                        let accel = { x: 0, y: 0, z: 0 };
+                        let dst = tree.getNode(dst_start + dst_i);
+                        for (let src_i = 0; src_i < src_count; src_i++) {
+                            let src = tree.getNode(src_start + src_i);
+                            let dist = {
+                                x: dst.x - src.x,
+                                y: dst.y - src.y,
+                                z: dst.z - src.z
+                            };
+                            let invDist = inverseSqrt(dot(dist, dist) + eps);
+                            let invDistCube = invDist * invDist * invDist;
+                            let s = 1 * invDistCube;
+                            accel.x += -s * inv4PI * dist.x;
+                            accel.y += -s * inv4PI * dist.y;
+                            accel.z += -s * inv4PI * dist.z;
+                        }
+                        direct_result[dst_i * 3] = accel.x;
+                        direct_result[dst_i * 3 + 1] = accel.y;
+                        direct_result[dst_i * 3 + 2] = accel.z;
+                    }
+                }
+
+
+                return [
+                    pair,
+                    { step: "p2m", result: p2m_result },
+                    { step: "m2l", result: m2l_result },
+                    {
+                        step: "l2p", result: l2p_result
+                    },
+                    {step:"direct",result:direct_result}
+                ];
+
+            });
+
+            console.log(this.debug_results)
 
         }
 

@@ -1,17 +1,11 @@
+import { FMMSolver } from "./FMMSolver";
 import { TreeBuilder } from "./TreeBuilder";
-
-
-
-
-
-
+import { KernelWgpu } from "./kernels/kernel_wgpu";
 
 var uniforms = null;
 
-
-
-function debug_m2l(core, numLevel, src_box_id, dst_box_id, tree: TreeBuilder) {
-
+export function debug_m2l(core: FMMSolver, numLevel, debug_Mnm, src_box_id, dst_box_id) {
+    const tree = core.tree;
     let indexi = core.unmorton(core.tree.boxIndexFull[src_box_id]);
     let ix = indexi.x,
         iy = indexi.y,
@@ -21,16 +15,22 @@ function debug_m2l(core, numLevel, src_box_id, dst_box_id, tree: TreeBuilder) {
     let jx = indexj.x, jy = indexj.y, jz = indexj.z;
     let je = core.morton1({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3) + 1;
 
+    const boxSize = core.tree.rootBoxSize / (1 << numLevel);
     const buffers = {
-        Dnm: core.kernel.Dnm
+        Dnm: (core.kernel as KernelWgpu).Dnm,
+        particleOffset: tree.particleOffset,
+        particleBuffer: tree.nodeBuffer,
+        uniforms: { boxSize: boxSize }
+
     };
-    const r = debug_m2l_shader(src_box_id, je, buffers);
+    const mnmSource = src_box_id;// core.interactionList[ii][ij] + core.tree.levelOffset[numLevel - 1]
+    const r = debug_m2l_shader(debug_Mnm, mnmSource, je, buffers);
 
     return r;
     // todo: je
 }
 
-function debug_m2l_shader(mnmSource: number, je: number, buffers) {
+function debug_m2l_shader(debug_Mnm, mnmSource: number, je: number, buffers) {
     const PI = 3.14159265358979323846;
     const inv4PI = 0.25 / PI;
     const eps = 1e-6;
@@ -81,7 +81,8 @@ function debug_m2l_shader(mnmSource: number, je: number, buffers) {
             f32(mortonIndex3D[2] - 3) * boxSize);
     }
 
-    const threadsPerGroup = 64;
+    // const threadsPerGroup = 64;
+    const threadsPerGroup = numCoefficients;
     const Mnm = buffers.Mnm;
     const Dnm = buffers.Dnm;
 
@@ -95,14 +96,21 @@ function debug_m2l_shader(mnmSource: number, je: number, buffers) {
             mg[nms] = m;
         }
     }
+
     let sharedMnmSource = new Float32Array(2 * threadsPerGroup);
     let tempTargetBuffer = new Float32Array(2 * threadsPerGroup);// every thread need a tempTarget
-    let MnmSourceOffset = mnmSource * numCoefficients;
+    // let MnmSourceOffset = mnmSource * numCoefficients;
     // every thread copy
-    for (let i = 0; i < numCoefficients; i++) {
-        sharedMnmSource[2 * i] = Mnm[2 * (MnmSourceOffset + i)];
-        sharedMnmSource[2 * i + 1] = Mnm[2 * (MnmSourceOffset + i) + 1];
+    // for (let i = 0; i < numCoefficients; i++) {
+    //     sharedMnmSource[2 * i] = Mnm[2 * (MnmSourceOffset + i)];
+    //     sharedMnmSource[2 * i + 1] = Mnm[2 * (MnmSourceOffset + i) + 1];
+    // }
+    for (let i = 0; i < numCoefficients * 2; i++) {
+        sharedMnmSource[i] = debug_Mnm[i];
     }
+
+
+
     let dist = unmorton1(je);
     let rho = sqrt(dot(dist, dist)) + eps;
     let jbase = (je - 1) * DnmSize;

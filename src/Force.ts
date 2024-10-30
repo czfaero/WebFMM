@@ -13,11 +13,16 @@ const msg = document.querySelector("#msg") as HTMLSpanElement;
 
 let tree: TreeBuilder;
 
-let debug_watch_box_ids: Array<Number>;//non-empty id
 
-export function Data_debug_SetBox(box_ids: Array<Number>) {
+export class Debug_Id_Pair {
+    src: number;
+    dst: number;
+}
+let debug_watch_box_id_pairs: Array<Debug_Id_Pair> = [];//non-empty id
 
-    debug_watch_box_ids = box_ids;
+export function Data_debug_AddWatch(src: number, dst: number) {
+
+    debug_watch_box_id_pairs.push({ src: src, dst: dst })
 }
 
 export function DataStart() {
@@ -108,8 +113,8 @@ export function DataUpdate(
             //tree.debug_restrict_nodes([0, 15]);
             //solver = new DirectSolver(tree);
             solver = new FMMSolver(tree);
-            if (debug_watch_box_ids) {
-                solver.debug_watch_box_ids = debug_watch_box_ids;
+            if (debug_watch_box_id_pairs.length > 0) {
+                solver.debug_watch_box_id_pairs = debug_watch_box_id_pairs;
             }
             //solver.debug = true;
             //solver.kernel.debug=true;
