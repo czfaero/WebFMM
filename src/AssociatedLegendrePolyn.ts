@@ -2,11 +2,10 @@
 
 
 /**
- * Calc Associated Legendre polynomials for given x and p.
- * 
- * @returns {Float32Array} Pnm: P00,P10,P11...
- * <p>Length: p*(p+1)/2</p> 
- * . m<=n.
+ * Calc Associated Legendre polynomials for given x and p.  
+ * @returns {Float32Array} Pnm: P00,P10,P11...  
+ * 0<=n<p, 0<=m<=n  
+ * Size: p*(p+1)/2
  */
 export function CalcALP(x: number, p: number): Float32Array {
     const sqrt = Math.sqrt;
