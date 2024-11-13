@@ -2,15 +2,19 @@
 
 
 /**
- * Calc Associated Legendre polynomials for given x and n.
- * @returns Float32Array: P00, 010, P11, ...Pnm. m<=n.
+ * Calc Associated Legendre polynomials for given x and p.
+ * 
+ * @returns {Float32Array} Pnm: P00,P10,P11...
+ * <p>Length: p*(p+1)/2</p> 
+ * . m<=n.
  */
-export function CalcALP(x: number, max_n: number): Float32Array {
+export function CalcALP(x: number, p: number): Float32Array {
     const sqrt = Math.sqrt;
     let i: number;
+    const max_n = p - 1;
 
 
-    const size = (max_n + 2) * (max_n + 1) / 2;
+    const size = p * (p + 1) / 2;
     const buffer = new Float32Array(size);
     const sinTheta = sqrt(1 - x * x);
 
