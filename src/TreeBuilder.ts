@@ -149,7 +149,7 @@ export class TreeBuilder {
     }
     /** non-empty FMM boxes @ maxLevel */
     numBoxIndexLeaf: number;
-    /** numBoxIndexLeaf for all levels */
+    /** non-empty FMM boxes (numBoxIndexLeaf) for all levels */
     numBoxIndexTotal: number;
     countNonEmptyBoxes(sortValue) {
         this.numBoxIndexLeaf = 0;
@@ -186,7 +186,10 @@ export class TreeBuilder {
     particleOffset: any;
     /** int[numBoxIndexFull]; link list for box index : Full -> NonEmpty */
     boxIndexMask: Int32Array;
-    /** int[numBoxIndexTotal]; link list for box index : NonEmpty -> Full */
+    /** int[numBoxIndexTotal];  
+     *  link list for box index : NonEmpty -> Full
+     *  Szie: non-empty FMM boxes @ all levels
+     */
     boxIndexFull: Int32Array;
     /** int[numBoxIndexLeaf] */
     numInteraction: Int32Array;
