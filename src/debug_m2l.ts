@@ -1,3 +1,4 @@
+import { CalcALP } from "./AssociatedLegendrePolyn";
 import { FMMSolver } from "./FMMSolver";
 import { TreeBuilder } from "./TreeBuilder";
 import { KernelWgpu } from "./kernels/kernel_wgpu";
@@ -229,4 +230,133 @@ function debug_m2l_shader(debug_Mnm, mnmSource: number, je: number, buffers) {
         tempTargetBuffer[2 * index + 1] = tempTarget.y;
     }
     return tempTargetBuffer;
+}
+
+
+export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, dst_box_id) {
+    function oddeven(n) {
+        if ((n & 1) == 1) { return -1; } else { return 1; }
+    }
+    const sqrt = Math.sqrt;
+    function inverseSqrt(x) { return 1 / Math.sqrt(x); }
+    const abs = Math.abs;
+    const pow = Math.pow;
+    const acos = Math.acos;
+    const atan = Math.atan;
+    const cos = Math.cos;
+    const sin = Math.sin;
+    const floor = Math.floor;
+    const rsqrt = inverseSqrt;
+    function vec3f(x, y, z) { return { x: x, y: y, z: z }; }
+    const eps = 1e-6;
+    const PI = 3.14159265358979323846;
+    const inv4PI = 0.25 / PI;
+    const numExpansions = 10;
+    const numExpansion2 = numExpansions * numExpansions;
+
+    function cart2sph(d) {
+        var r = sqrt(d.x * d.x + d.y * d.y + d.z * d.z) + eps;
+        var theta = acos(d.z / r);
+        var phi;
+        if (abs(d.x) + abs(d.y) < eps) {
+            phi = 0;
+        }
+        else if (abs(d.x) < eps) {
+            phi = d.y / abs(d.y) * PI * 0.5;
+        }
+        else if (d.x > 0) {
+            phi = atan(d.y / d.x);
+        }
+        else {
+            phi = atan(d.y / d.x) + PI;
+        }
+        return vec3f(r, theta, phi);
+    }
+    function CalcAnm(n: number, m: number, factorial: Float32Array) {
+        return oddeven(n) * inverseSqrt(factorial[n - m] * factorial[n + m]);
+    }
+    function CalcYnmFact(n: number, m: number, factorial: Float32Array) {
+        m = abs(m);
+        return sqrt(factorial[n - m] / factorial[n + m]);
+    }
+
+
+
+    const tree = core.tree;
+    const threadsPerGroup = numExpansion2;
+    const debug_Lnm = new Float32Array(2 * threadsPerGroup);
+
+    const MnmSource = new Float32Array(2 * threadsPerGroup);
+    for (let i = 0; i < numExpansion2 * 2; i++) {
+        MnmSource[i] = debug_Mnm[i];
+    }
+    const factorial = new Float32Array(2 * numExpansions); // accessed up to 2*(numExpansions-1)
+    for (let i = 0, fact = 1; i < factorial.length; i++) {
+        factorial[i] = fact;
+        fact = fact * (i + 1);
+    }
+
+    const boxSize = core.tree.rootBoxSize / (1 << numLevel);
+
+    const src_index3D = core.unmorton(tree.boxIndexFull[src_box_id]);
+    const dst_index3D = core.unmorton(tree.boxIndexFull[dst_box_id]);
+    const distX = dst_index3D.x - src_index3D.x,
+        distY = dst_index3D.y - src_index3D.y,
+        distZ = dst_index3D.z - src_index3D.z;
+
+    const sph = cart2sph({ x: distX * boxSize, y: distY * boxSize, z: distZ * boxSize });
+    const rho = sph.x, alpha = sph.y, beta = sph.z;
+    const Pnm = CalcALP(numExpansions, cos(alpha));
+    const rho_n = new Float32Array(numExpansions);
+    for (let i = 0, v = 1; i < rho_n.length; i++) {
+        rho_n[i] = v;
+        v = v * rho;
+    }
+
+    let ng = new Int32Array(threadsPerGroup);
+    let mg = new Int32Array(threadsPerGroup);
+    for (let n = 0; n < numExpansions; n++) {
+        for (let m = -n; m <= n; m++) {
+            let i = n * n + n + m;
+            ng[i] = n;
+            mg[i] = m;
+        }
+    }
+    function thread(thread_id: number) {
+        let L_real = 0, L_imag = 0;
+        const j = ng[thread_id];
+        const k = mg[thread_id]; // -j<=k<=j
+        const Ajk = CalcAnm(j, k, factorial);
+        for (let n = 0; n < numExpansions; n++) {
+            for (let m = -n; m <= n; m++) {
+                let i_Pnm = (j + n) * (j + n + 1) / 2 + abs(m - k);
+                const Anm = CalcAnm(n, m, factorial);
+                const A_under = CalcAnm(j + n, m - k, factorial);
+                const YnmFact = CalcYnmFact(j + n, m - k, factorial);
+                const C = oddeven((abs(k - m) - abs(k) - abs(m)) / 2) * Anm * Ajk * YnmFact * Pnm[i_Pnm]
+                    * oddeven(n) / A_under / rho_n[j] / rho_n[n] / rho;
+
+                let i_src = n * n + n + m;
+                const O_real = MnmSource[2 * i_src + 0];
+                const O_imag = MnmSource[2 * i_src + 1];
+
+                const e_cos = cos((k - m) * beta);
+                const e_sin = sin((k - m) * beta);
+
+                const xcos = O_real * e_cos,
+                    ysin = O_imag * e_sin,
+                    xsin = O_real * e_sin,
+                    ycos = O_imag * e_cos;
+                L_real += xcos - ysin;
+                L_imag += xsin + ycos;
+            }
+        }
+        debug_Lnm[thread_id * 2] += L_real;
+        debug_Lnm[thread_id * 2 + 1] += L_imag;
+        // end of thread
+    }
+    for (let t = 0; t < threadsPerGroup; t++) {
+        thread(t);
+    }
+    return debug_Lnm;
 }
