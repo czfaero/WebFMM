@@ -253,7 +253,7 @@ function debug_p2m_shader2(box_id: number, index: number, buffers: any) {
     const uniforms = buffers.uniforms;
     const numExpansions = uniforms.numExpansions;
     const numExpansions2 = numExpansions * numExpansions;
-    const numCoefficients = numExpansions * (numExpansions + 1) / 2;
+    // const numCoefficients = numExpansions * (numExpansions + 1) / 2;
     const resultBuffer = new Float32Array(numExpansions2 * 2);
     const boxSize = uniforms.boxSize;
     const particleOffset = buffers.particleOffset;
