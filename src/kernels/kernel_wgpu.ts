@@ -6,7 +6,7 @@ import wgsl_l2l from '../shaders/FMM_l2l.wgsl';
 import wgsl_l2p from '../shaders/FMM_l2p.wgsl';
 import wgsl_buffer_sum from '../shaders/buffer_sum.wgsl';
 
-
+import { cart2sph, GetIndex3D } from "../utils";
 import { IKernel } from './kernel';
 import { FMMSolver } from '../FMMSolver';
 
@@ -98,7 +98,7 @@ export class KernelWgpu implements IKernel {
     this.adapter = await navigator.gpu.requestAdapter();
     this.device = await this.adapter.requestDevice();
     // to-do: check limit
-    //console.log(this.adapter);
+    console.log(this.adapter);
     this.maxThreadCount = 256;
     this.maxWorkgroupCount = 256;
     // this.cmdBufferLength = this.maxThreadCount * this.maxWorkgroupCount * 2;// to-do: set a good value
@@ -262,7 +262,7 @@ export class KernelWgpu implements IKernel {
     }
 
     for (let i = 0; i < numRelativeBox; i++) {
-      let boxIndex3D = core.unmorton(i);
+      let boxIndex3D = GetIndex3D(i);
       let xijc = boxIndex3D.x - 3;
       let yijc = boxIndex3D.y - 3;
       let zijc = boxIndex3D.z - 3;
@@ -663,7 +663,7 @@ export class KernelWgpu implements IKernel {
       let nfjp = Math.trunc(core.tree.boxIndexFull[jb] / 8);
       let nfjc = core.tree.boxIndexFull[jb] % 8;
       let ib = core.tree.boxIndexMask[nfjp] + core.tree.levelOffset[numLevel - 1];// MnmIndex
-      let boxIndex3D = core.unmorton(nfjc);
+      let boxIndex3D = GetIndex3D(nfjc);
       boxIndex3D.x = 4 - boxIndex3D.x * 2;
       boxIndex3D.y = 4 - boxIndex3D.y * 2;
       boxIndex3D.z = 4 - boxIndex3D.z * 2;
@@ -741,7 +741,7 @@ export class KernelWgpu implements IKernel {
 
     for (let ii = 0; ii < numBoxIndex; ii++) {
       let ib = ii + core.tree.levelOffset[numLevel - 1];
-      let indexi = core.unmorton(core.tree.boxIndexFull[ib]);
+      let indexi = GetIndex3D(core.tree.boxIndexFull[ib]);
       let ix = indexi.x,
         iy = indexi.y,
         iz = indexi.z;
@@ -750,7 +750,7 @@ export class KernelWgpu implements IKernel {
       for (let ij = 0; ij < core.tree.numInteraction[ii]; ij++) {
         let jj = core.interactionList[ii][ij];
         let jbd = jj + core.tree.levelOffset[numLevel - 1];
-        let indexj = core.unmorton(core.tree.boxIndexFull[jbd]);
+        let indexj = GetIndex3D(core.tree.boxIndexFull[jbd]);
         let jx = indexj.x, jy = indexj.y, jz = indexj.z;
 
         let je = core.morton1({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3);
@@ -833,7 +833,7 @@ export class KernelWgpu implements IKernel {
       let ib = ii + core.tree.levelOffset[numLevel - 1];
       let nfip = Math.floor(core.tree.boxIndexFull[ib] / 8);
       let nfic = core.tree.boxIndexFull[ib] % 8;
-      let boxIndex3D = core.unmorton(nfic);
+      let boxIndex3D = GetIndex3D(nfic);
       boxIndex3D.x = boxIndex3D.x * 2 + 2;
       boxIndex3D.y = boxIndex3D.y * 2 + 2;
       boxIndex3D.z = boxIndex3D.z * 2 + 2;

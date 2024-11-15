@@ -2,17 +2,18 @@ import { CalcALP } from "./AssociatedLegendrePolyn";
 import { FMMSolver } from "./FMMSolver";
 import { TreeBuilder } from "./TreeBuilder";
 import { KernelWgpu } from "./kernels/kernel_wgpu";
+import { cart2sph, GetIndex3D } from "./utils";
 
 var uniforms = null;
 
 export function debug_m2l(core: FMMSolver, numLevel, debug_Mnm, src_box_id, dst_box_id) {
     const tree = core.tree;
-    let indexi = core.unmorton(core.tree.boxIndexFull[src_box_id]);
+    let indexi = GetIndex3D(core.tree.boxIndexFull[src_box_id]);
     let ix = indexi.x,
         iy = indexi.y,
         iz = indexi.z;
     let jbd = dst_box_id + core.tree.levelOffset[numLevel - 1];
-    let indexj = core.unmorton(core.tree.boxIndexFull[jbd]);
+    let indexj = GetIndex3D(core.tree.boxIndexFull[jbd]);
     let jx = indexj.x, jy = indexj.y, jz = indexj.z;
     let je = core.morton1({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3) + 1;
 
@@ -298,8 +299,8 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
 
     const boxSize = core.tree.rootBoxSize / (1 << numLevel);
 
-    const src_index3D = core.unmorton(tree.boxIndexFull[src_box_id]);
-    const dst_index3D = core.unmorton(tree.boxIndexFull[dst_box_id]);
+    const src_index3D = GetIndex3D(tree.boxIndexFull[src_box_id]);
+    const dst_index3D = GetIndex3D(tree.boxIndexFull[dst_box_id]);
     const distX = dst_index3D.x - src_index3D.x,
         distY = dst_index3D.y - src_index3D.y,
         distZ = dst_index3D.z - src_index3D.z;

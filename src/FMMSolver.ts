@@ -5,6 +5,8 @@ import { KernelWgpu } from './kernels/kernel_wgpu';
 //import { KernelTs } from './kernels/kernel_ts';
 import { TreeBuilder } from './TreeBuilder';
 
+import { cart2sph, GetIndex3D, GetIndexFrom3D } from "./utils";
+
 import { debug_p2m } from './debug_p2m';
 import { debug_m2l } from './debug_m2l';
 import { Debug_Id_Pair } from './Force';
@@ -28,49 +30,6 @@ export class FMMSolver {
 
 
 
-    /**@return Object with x,y,z */
-    unmorton(boxIndex: number) {
-        const mortonIndex3D = new Int32Array(3);
-
-        mortonIndex3D.fill(0);
-        let n = boxIndex;
-        let k = 0;
-        let i = 0;
-        while (n != 0) {
-            let j = 2 - k;
-            mortonIndex3D[j] += (n % 2) * (1 << i);
-            n >>= 1;
-            k = (k + 1) % 3;
-            if (k == 0) i++;
-        }
-        return {
-            x: mortonIndex3D[1],
-            y: mortonIndex3D[2],
-            z: mortonIndex3D[0]
-        }
-    }
-    // Generate Morton index for a box center to use in M2L translation
-    morton1(boxIndex3D, numLevel: number) {
-
-        let boxIndex = 0;
-        for (let i = 0; i < numLevel; i++) {
-            let nx = boxIndex3D.x % 2;
-            boxIndex3D.x >>= 1;
-            boxIndex += nx * (1 << (3 * i + 1));
-
-            let ny = boxIndex3D.y % 2;
-            boxIndex3D.y >>= 1;
-            boxIndex += ny * (1 << (3 * i));
-
-            let nz = boxIndex3D.z % 2;
-            boxIndex3D.z >>= 1;
-            boxIndex += nz * (1 << (3 * i + 2));
-        }
-        return boxIndex
-    }
-
-
-
     interactionList: any;
 
 
@@ -90,7 +49,7 @@ export class FMMSolver {
         // Calculate the minimum and maximum of boxIndex3D
         for (let jj = 0; jj < numBoxIndex; jj++) {
             let jb = jj + tree.levelOffset[numLevel - 1];
-            let boxIndex3D = this.unmorton(tree.boxIndexFull[jb]);
+            let boxIndex3D = GetIndex3D(tree.boxIndexFull[jb]);
             jxmin = Math.min(jxmin, boxIndex3D.x);
             jxmax = Math.max(jxmax, boxIndex3D.x);
             jymin = Math.min(jymin, boxIndex3D.y);
@@ -103,7 +62,7 @@ export class FMMSolver {
         for (let ii = 0; ii < numBoxIndex; ii++) {
             let ib = ii + tree.levelOffset[numLevel - 1];
             tree.numInteraction[ii] = 0;
-            let boxIndex3D = this.unmorton(tree.boxIndexFull[ib]);
+            let boxIndex3D = GetIndex3D(tree.boxIndexFull[ib]);
             let ix = boxIndex3D.x;
             let iy = boxIndex3D.y;
             let iz = boxIndex3D.z;
@@ -113,7 +72,7 @@ export class FMMSolver {
                         boxIndex3D.x = jx;
                         boxIndex3D.y = jy;
                         boxIndex3D.z = jz;
-                        let boxIndex = this.morton1(boxIndex3D, numLevel);
+                        let boxIndex = GetIndexFrom3D(boxIndex3D, numLevel);
                         let jj = tree.boxIndexMask[boxIndex];
                         if (jj != -1) {
                             this.interactionList[ii][tree.numInteraction[ii]] = jj;
@@ -136,7 +95,7 @@ export class FMMSolver {
         // Calculate the minimum and maximum of boxIndex3D
         for (let jj = 0; jj < numBoxIndex; jj++) {
             let jb = jj + tree.levelOffset[numLevel - 1];
-            let boxIndex3D = this.unmorton(tree.boxIndexFull[jb]);
+            let boxIndex3D = GetIndex3D(tree.boxIndexFull[jb]);
             jxmin = Math.min(jxmin, boxIndex3D.x);
             jxmax = Math.max(jxmax, boxIndex3D.x);
             jymin = Math.min(jymin, boxIndex3D.y);
@@ -148,13 +107,13 @@ export class FMMSolver {
         for (let ii = 0; ii < numBoxIndex; ii++) {
             let ib = ii + tree.levelOffset[numLevel - 1];
             tree.numInteraction[ii] = 0;
-            let boxIndex3D = this.unmorton(tree.boxIndexFull[ib]);
+            let boxIndex3D = GetIndex3D(tree.boxIndexFull[ib]);
             let ix = boxIndex3D.x,
                 iy = boxIndex3D.y,
                 iz = boxIndex3D.z;
             for (let jj = 0; jj < numBoxIndex; jj++) {
                 let jb = jj + tree.levelOffset[numLevel - 1];
-                boxIndex3D = this.unmorton(tree.boxIndexFull[jb]);
+                boxIndex3D = GetIndex3D(tree.boxIndexFull[jb]);
                 let jx = boxIndex3D.x,
                     jy = boxIndex3D.y,
                     jz = boxIndex3D.z;
@@ -178,7 +137,7 @@ export class FMMSolver {
         // Calculate the minimum and maximum of boxIndex3D
         for (let jj = 0; jj < numBoxIndex; jj++) {
             let jb = jj + tree.levelOffset[numLevel - 1];
-            let boxIndex3D = this.unmorton(tree.boxIndexFull[jb]);
+            let boxIndex3D = GetIndex3D(tree.boxIndexFull[jb]);
             jxmin = Math.min(jxmin, boxIndex3D.x);
             jxmax = Math.max(jxmax, boxIndex3D.x);
             jymin = Math.min(jymin, boxIndex3D.y);
@@ -189,7 +148,7 @@ export class FMMSolver {
         for (let ii = 0; ii < numBoxIndex; ii++) {
             let ib = ii + tree.levelOffset[numLevel - 1];
             tree.numInteraction[ii] = 0;
-            let boxIndex3D = this.unmorton(tree.boxIndexFull[ib]);
+            let boxIndex3D = GetIndex3D(tree.boxIndexFull[ib]);
             let ix = boxIndex3D.x,
                 iy = boxIndex3D.y,
                 iz = boxIndex3D.z;
@@ -206,7 +165,7 @@ export class FMMSolver {
                                         boxIndex3D.x = jx;
                                         boxIndex3D.y = jy;
                                         boxIndex3D.z = jz;
-                                        let boxIndex = this.morton1(boxIndex3D, numLevel);
+                                        let boxIndex = GetIndexFrom3D(boxIndex3D, numLevel);
                                         let jj = tree.boxIndexMask[boxIndex];
                                         if (jj != -1) {
                                             this.interactionList[ii][tree.numInteraction[ii]] = jj;

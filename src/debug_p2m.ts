@@ -1,6 +1,7 @@
 import { CalcALP } from "./AssociatedLegendrePolyn";
 import { FMMSolver } from "./FMMSolver";
 import { TreeBuilder } from "./TreeBuilder";
+import { cart2sph, GetIndex3D } from "./utils";
 const PI = 3.14159265358979323846;
 const inv4PI = 0.25 / PI;
 const eps = 1e-6;
@@ -73,45 +74,6 @@ function debug_p2m_shader(box: number, index, buffers) {
     }
     function vec3_minus(v) { return { x: -v.x, y: -v.y, z: -v.z } }
 
-
-    function unmorton(boxIndex) {
-        var mortonIndex3D = [0, 0, 0];
-
-        var n = boxIndex;
-        var k = 0;
-        var i = 0;
-        while (n != 0) {
-            let j = 2 - k;
-            mortonIndex3D[j] += (n % 2) * (1 << i);
-            n >>= 1;
-            k = (k + 1) % 3;
-            if (k == 0) { i++; }
-        }
-        return {
-            x: mortonIndex3D[1],
-            y: mortonIndex3D[2],
-            z: mortonIndex3D[0]
-        };
-    }
-    function cart2sph(d) {
-        var r = sqrt(d.x * d.x + d.y * d.y + d.z * d.z) + eps;
-        var theta = acos(d.z / r);
-        var phi;
-        if (abs(d.x) + abs(d.y) < eps) {
-            phi = 0;
-        }
-        else if (abs(d.x) < eps) {
-            phi = d.y / abs(d.y) * PI * 0.5;
-        }
-        else if (d.x > 0) {
-            phi = atan(d.y / d.x);
-        }
-        else {
-            phi = atan(d.y / d.x) + PI;
-        }
-        return vec3f(r, theta, phi);
-    }
-
     const uniforms = buffers.uniforms;
     const numExpansions = uniforms.numExpansions;
     const numCoefficients = numExpansions * (numExpansions + 1) / 2;
@@ -121,7 +83,7 @@ function debug_p2m_shader(box: number, index, buffers) {
     const boxSize = uniforms.boxSize;
 
     const factorial = buffers.factorial;
-    let index3D = unmorton(u32(index));
+    let index3D = GetIndex3D(u32(index));
     let boxMin = vec3f(uniforms.boxMinX, uniforms.boxMinY, uniforms.boxMinZ);
     let boxCenter = vec3_add([index3D, vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
     const particleOffset = buffers.particleOffset;
@@ -212,43 +174,7 @@ function debug_p2m_shader2(box_id: number, index: number, buffers: any) {
     function vec3_minus(v) { return { x: -v.x, y: -v.y, z: -v.z } }
 
 
-    function unmorton(boxIndex) {
-        var mortonIndex3D = [0, 0, 0];
 
-        var n = boxIndex;
-        var k = 0;
-        var i = 0;
-        while (n != 0) {
-            let j = 2 - k;
-            mortonIndex3D[j] += (n % 2) * (1 << i);
-            n >>= 1;
-            k = (k + 1) % 3;
-            if (k == 0) { i++; }
-        }
-        return {
-            x: mortonIndex3D[1],
-            y: mortonIndex3D[2],
-            z: mortonIndex3D[0]
-        };
-    }
-    function cart2sph(d) {
-        var r = sqrt(d.x * d.x + d.y * d.y + d.z * d.z) + eps;
-        var theta = acos(d.z / r);
-        var phi;
-        if (abs(d.x) + abs(d.y) < eps) {
-            phi = 0;
-        }
-        else if (abs(d.x) < eps) {
-            phi = d.y / abs(d.y) * PI * 0.5;
-        }
-        else if (d.x > 0) {
-            phi = atan(d.y / d.x);
-        }
-        else {
-            phi = atan(d.y / d.x) + PI;
-        }
-        return vec3f(r, theta, phi);
-    }
 
     const uniforms = buffers.uniforms;
     const numExpansions = uniforms.numExpansions;
@@ -269,7 +195,7 @@ function debug_p2m_shader2(box_id: number, index: number, buffers: any) {
         return vec4f(particleBuffer[i * 4], particleBuffer[i * 4 + 1], particleBuffer[i * 4 + 2], particleBuffer[i * 4 + 3]);
     }
 
-    let index3D = unmorton(u32(index));
+    let index3D = GetIndex3D(u32(index));
     let boxMin = vec3f(uniforms.boxMinX, uniforms.boxMinY, uniforms.boxMinZ);
     let boxCenter = vec3_add([index3D, vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
 
