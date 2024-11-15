@@ -2,7 +2,7 @@ import { CalcALP } from "./AssociatedLegendrePolyn";
 import { FMMSolver } from "./FMMSolver";
 import { TreeBuilder } from "./TreeBuilder";
 import { KernelWgpu } from "./kernels/kernel_wgpu";
-import { cart2sph, GetIndex3D } from "./utils";
+import { cart2sph, GetIndex3D, GetIndexFrom3D } from "./utils";
 
 var uniforms = null;
 
@@ -15,7 +15,7 @@ export function debug_m2l(core: FMMSolver, numLevel, debug_Mnm, src_box_id, dst_
     let jbd = dst_box_id + core.tree.levelOffset[numLevel - 1];
     let indexj = GetIndex3D(core.tree.boxIndexFull[jbd]);
     let jx = indexj.x, jy = indexj.y, jz = indexj.z;
-    let je = core.morton1({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3) + 1;
+    let je =  GetIndexFrom3D({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3) + 1;
 
     const boxSize = core.tree.rootBoxSize / (1 << numLevel);
     const buffers = {

@@ -6,7 +6,7 @@ import wgsl_l2l from '../shaders/FMM_l2l.wgsl';
 import wgsl_l2p from '../shaders/FMM_l2p.wgsl';
 import wgsl_buffer_sum from '../shaders/buffer_sum.wgsl';
 
-import { cart2sph, GetIndex3D } from "../utils";
+import { cart2sph, GetIndex3D, GetIndexFrom3D } from "../utils";
 import { IKernel } from './kernel';
 import { FMMSolver } from '../FMMSolver';
 
@@ -667,7 +667,7 @@ export class KernelWgpu implements IKernel {
       boxIndex3D.x = 4 - boxIndex3D.x * 2;
       boxIndex3D.y = 4 - boxIndex3D.y * 2;
       boxIndex3D.z = 4 - boxIndex3D.z * 2;
-      let je = core.morton1(boxIndex3D, 3);
+      let je = GetIndexFrom3D(boxIndex3D, 3);
       command[jj * commandLength + 0] = jb;//Mnm index
       command[jj * commandLength + 1] = je + 1;
       command[jj * commandLength + 2] = core.tree.boxIndexFull[jb];//to-do: check for empty box or more level 
@@ -753,7 +753,7 @@ export class KernelWgpu implements IKernel {
         let indexj = GetIndex3D(core.tree.boxIndexFull[jbd]);
         let jx = indexj.x, jy = indexj.y, jz = indexj.z;
 
-        let je = core.morton1({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3);
+        let je = GetIndexFrom3D({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3);
         let jb = jj + core.tree.levelOffset[numLevel - 1];
         command[ii * commandLength + 1 + ij * 2] = jb;//Mnm index
         command[ii * commandLength + 1 + ij * 2 + 1] = je + 1;
@@ -837,7 +837,7 @@ export class KernelWgpu implements IKernel {
       boxIndex3D.x = boxIndex3D.x * 2 + 2;
       boxIndex3D.y = boxIndex3D.y * 2 + 2;
       boxIndex3D.z = boxIndex3D.z * 2 + 2;
-      let je = core.morton1(boxIndex3D, 3);
+      let je = GetIndexFrom3D(boxIndex3D, 3);
       ib = neo[nfip];//source
       //console.log(`${ib}=>${ii}`)
       command[ii * commandLength] = ib;
