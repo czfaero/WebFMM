@@ -1,5 +1,6 @@
 import { FMMSolver } from "./FMMSolver";
 import { TreeBuilder } from "./TreeBuilder";
+import { cart2sph, GetIndex3D } from "./utils";
 
 export function debug_l2p(core: FMMSolver, debug_Lnm, box_id) {
 
@@ -24,7 +25,7 @@ export function debug_l2p(core: FMMSolver, debug_Lnm, box_id) {
 
     };
     const index = core.tree.boxIndexFull[box_id];
-    const r = debug_l2p_shader(debug_Lnm, box_id, index, buffers);
+    const r = debug_l2p_shader2(debug_Lnm, box_id, index, buffers);
     return r;
 }
 
@@ -62,45 +63,6 @@ function debug_l2p_shader(debug_Lnm, box, index, buffers) {
         return { x: x, y: y, z: z }
     }
     function vec3_minus(v) { return { x: -v.x, y: -v.y, z: -v.z } }
-
-    function unmorton(boxIndex) {
-        var mortonIndex3D = [0, 0, 0];
-
-        var n = boxIndex;
-        var k = 0;
-        var i = 0;
-        while (n != 0) {
-            let j = 2 - k;
-            mortonIndex3D[j] += (n % 2) * (1 << i);
-            n >>= 1;
-            k = (k + 1) % 3;
-            if (k == 0) { i++; }
-        }
-        return {
-            x: mortonIndex3D[1],
-            y: mortonIndex3D[2],
-            z: mortonIndex3D[0]
-        };
-    }
-    function cart2sph(d) {
-        var r = sqrt(d.x * d.x + d.y * d.y + d.z * d.z) + eps;
-        var theta = acos(d.z / r);
-        var phi;
-        if (abs(d.x) + abs(d.y) < eps) {
-            phi = 0;
-        }
-        else if (abs(d.x) < eps) {
-            phi = d.y / abs(d.y) * PI * 0.5;
-        }
-        else if (d.x > 0) {
-            phi = atan(d.y / d.x);
-        }
-        else {
-            phi = atan(d.y / d.x) + PI;
-        }
-        return vec3f(r, theta, phi);
-    }
-
 
     function thread_l2p(particleIndex) {
         const LnmOffset = 0;
@@ -173,7 +135,7 @@ function debug_l2p_shader(debug_Lnm, box, index, buffers) {
     //let index = command[group_id.x * commandLength + 3];
     //let threadId = i32(local_id.x);
     let LnmOffset = box * numCoefficients * 2;
-    let index3D = unmorton(u32(index));
+    let index3D = GetIndex3D(u32(index));
     let boxMin = vec3f(uniforms.boxMinX, uniforms.boxMinY, uniforms.boxMinZ);
     let boxCenter = vec3_add([index3D, vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
     // (vec3f(index3D) + vec3f(0.5, 0.5, 0.5)) * uniforms.boxSize + boxMin;
@@ -183,7 +145,186 @@ function debug_l2p_shader(debug_Lnm, box, index, buffers) {
     const result = new Float32Array((end - start + 1) * 3);
     for (let i = start; i <= end; i++) {
         const tempAccel = thread_l2p(i);
+        debugger;
         result.set(tempAccel, (i - start) * 3);
+    }
+    return result;
+}
+
+
+function debug_l2p_shader2(debug_Lnm, box_id, index, buffers) {
+    const PI = Math.PI;
+    const inv4PI = 0.25 / PI;
+    const eps = 1e-6;
+    const numExpansions = 10;
+    const numExpansion2 = numExpansions * numExpansions;
+    const DnmSize = (4 * numExpansion2 * numExpansions - numExpansions) / 3;
+    const numRelativeBox = 512;
+    const maxM2LInteraction = 189;
+    function u32(x) { return Math.floor(x); }
+    function f32(x) { return x; }
+    function i32(x) { return Math.floor(x); }
+    function vec3f(x, y, z) { return { x: x, y: y, z: z }; }
+    function vec4f(x, y, z, w) { return { x: x, y: y, z: z, w: w }; }
+    function vec2f(x, y) { return { x: x, y: y }; }
+    function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+    const sqrt = Math.sqrt;
+    function inverseSqrt(x) { return 1 / Math.sqrt(x); }
+    const abs = Math.abs;
+    const pow = Math.pow;
+    const acos = Math.acos;
+    const atan = Math.atan;
+    const cos = Math.cos;
+    const sin = Math.sin;
+    function vec3_add(arr) {
+        let x = 0, y = 0, z = 0;
+        for (const v of arr) { x += v.x; y += v.y; z += v.z; }
+        return { x: x, y: y, z: z }
+    }
+    function vec3_minus(v) { return { x: -v.x, y: -v.y, z: -v.z } }
+
+    const uniforms = buffers.uniforms;
+
+    let boxSize = uniforms.boxSize;
+    let index3D = GetIndex3D(u32(index));
+    let boxMin = vec3f(uniforms.boxMinX, uniforms.boxMinY, uniforms.boxMinZ);
+    let boxCenter = vec3_add([index3D, vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
+
+    const start = buffers.particleOffset[0][box_id];
+    const end = buffers.particleOffset[1][box_id];
+
+    const count = end - start + 1;
+    const result = new Float32Array(3 * count);
+    const nodeBuffer = buffers.particleBuffer;
+    const factorial = buffers.factorial;
+
+
+    const Lnm = debug_Lnm;
+    function getParticle(i) {
+        return vec4f(nodeBuffer[i * 4], nodeBuffer[i * 4 + 1], nodeBuffer[i * 4 + 2], nodeBuffer[i * 4 + 3]);
+    }
+
+    /**
+     * Call the func, with:  
+     * n:  0 <= n < numExpansions  
+     * m: -n <= m <= n  
+     * r_n : r^n  
+     * p : Associated Legendre polynomials for n, m at x.  
+     * p_d: Derivative of p at x. 
+     * @param numExpansions
+     * @param x cos(theta)
+     * @param func 
+     */
+    function CalcALP_R(numExpansions: number, x: number, r: number, func: Function) {
+        const sqrt = Math.sqrt;
+        let i: number;
+        const max_n = numExpansions - 1;
+
+        const x2 = x * x;
+        const sinTheta = sqrt(1 - x2);
+
+        let Pnn = 1; // start from P00
+        let r_m = 1; // r^m
+        let m = 0;
+        let P_pre2;
+        let P_pre1;
+
+        // for m=0, call func only once
+        {
+            let n = 0, r_n = r_m;
+            n++; r_n = r_n * r;
+
+            let Pnn_next = x * (2 * m + 1) * Pnn; // Recurrence formula (2)
+
+            let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (1 - x2) // Recurrence formula (4)
+            let Pnn_next_deriv = (n * x * Pnn_next - (n + m) * Pnn) / (x2 - 1) // Recurrence formula (5)
+
+            func(0, m, m, r_m, Pnn, Pnn_deriv);
+            func(n, m, m, r_n, Pnn_next, Pnn_next_deriv);
+
+            P_pre2 = Pnn;
+            P_pre1 = Pnn_next;
+            for (; n < max_n;) {
+                n++; r_n = r_n * r;
+                const P_current = ((2 * n - 1) * x * P_pre1 - (n + m - 1) * P_pre2) / (n - m);// Recurrence formula (3)
+                const P_deriv = (n * x * P_current - (n + m) * P_pre1) / (x2 - 1) // Recurrence formula (5)
+                func(n, m, m, r_n, P_current, P_deriv);
+                P_pre2 = P_pre1;
+                P_pre1 = P_current;
+            }
+
+        }
+        // start from m++ -> 1
+        for (; m < max_n;) {
+            Pnn = -(2 * m + 1) * sinTheta * Pnn;// Recurrence formula (1)
+            m++; r_m = r_m * r;
+            let n = m, r_n = r_m;
+            let Pnn_next = x * (2 * m + 1) * Pnn; // Recurrence formula (2)
+
+            let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (1 - x2) // Recurrence formula (4)
+            let Pnn_next_deriv = (n * x * Pnn_next - (n + m) * Pnn) / (x2 - 1) // Recurrence formula (5)
+            func(n, m, r_n, Pnn, Pnn_deriv);
+            func(n, -m, r_n, Pnn, Pnn_deriv);
+            n++; r_n = r_n * r;
+            func(n, m, m, r_n, Pnn_next, Pnn_next_deriv);
+            func(n, -m, m, r_n, Pnn_next, Pnn_next_deriv);
+
+            P_pre2 = Pnn;
+            P_pre1 = Pnn_next;
+            for (; n < max_n;) {
+                n++; r_n = r_n * r;
+                const P_current = ((2 * n - 1) * x * P_pre1 - (n + m - 1) * P_pre2) / (n - m);// Recurrence formula (3)
+                const P_deriv = (n * x * P_current - (n + m) * P_pre1) / (x2 - 1) // Recurrence formula (5)
+                func(n, m, m, r_n, P_current, P_deriv);
+                func(n, -m, m, r_n, P_current, P_deriv);
+                P_pre2 = P_pre1;
+                P_pre1 = P_current;
+            }
+        }
+        // m=n
+        {
+            Pnn = -(2 * m + 1) * sinTheta * Pnn;// Recurrence formula (1)
+            m++; r_m = r_m * r;
+            let n = m, r_n = r_m;
+            let Pnn_next = x * (2 * m + 1) * Pnn; // Recurrence formula (2)
+            let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (1 - x2) // Recurrence formula (4)
+            func(n, m, m, r_n, Pnn, Pnn_deriv);
+            func(n, -m, m, r_n, Pnn, Pnn_deriv);
+        }
+    }
+
+    function thread(thread_id) {
+        const node_id = start + thread_id;
+        const node = getParticle(node_id);
+        let dist = vec3f(node.x - boxCenter.x, node.y - boxCenter.y, node.z - boxCenter.z);
+
+        let c = cart2sph(dist);
+        let r = c.x; let theta = c.y; let phi = c.z;
+        let accelR = 0, accelTheta = 0, accelPhi = 0;
+
+        function proc(n, m, abs_m, r_n, Pnm, Pnm_d) {
+            let i_Lnm = n * n + n + m;
+            let Lnm_real = Lnm[i_Lnm * 2], Lnm_imag = Lnm[i_Lnm * 2 + 1];
+            let Ynm_fact = sqrt(factorial[n - abs_m] / factorial[n + abs_m]);
+            let Ynm_real = Ynm_fact * Pnm;// without e
+            let angle = m * phi;
+            let real = Lnm_real * cos(angle) - Lnm_imag * sin(angle);
+            let imag = Lnm_real * cos(angle) - Lnm_imag * sin(angle);
+            let d_r = n * r_n / r * Ynm_real * real;
+            let d_theta = -r_n / r * Ynm_fact * sin(theta) * Pnm_d;
+            let d_phi = m * r_n / r / sin(theta) * Ynm_real * imag;
+            accelR += d_r;
+            accelTheta += d_theta;
+            accelPhi += d_phi;
+        }
+        CalcALP_R(numExpansions, cos(theta), r, proc);
+        // to-do; 
+
+    }
+    const maxNodeCount = count;// to-do
+    for (let i = 0; i <= maxNodeCount; i++) {
+        thread(i);
+
     }
     return result;
 }
