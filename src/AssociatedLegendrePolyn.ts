@@ -19,18 +19,17 @@ export function CalcALP(p: number, x: number): Float32Array {
 
     let Pnn = 1; // start from P00
     buffer[0] = Pnn;
-    for (let loop = 0; loop < max_n; loop++) { // 最后的Pnn n=max_n被上一轮计算
-        let n = loop;
-        let m = n;
+    for (let m = 0; m < max_n; m++) { // 最后的Pnn n=max_n被上一轮计算
+        let n = m;
 
         let P_pre2 = Pnn;
 
         n++;
-        let P_pre1 = x * (2 * m + 1) * Pnn;
+        let P_pre1 = x * (2 * m + 1) * Pnn;// Recurrence formula (2)
         i = n * (n + 1) / 2 + m; buffer[i] = P_pre1;
 
         for (; n < max_n;) {
-            const P_current = ((2 * n + 1) * x * P_pre1 - (n + m) * P_pre2) / (n - m + 1);
+            const P_current = ((2 * n + 1) * x * P_pre1 - (n + m) * P_pre2) / (n - m + 1);// Recurrence formula (3)
             n++;
             i = n * (n + 1) / 2 + m; buffer[i] = P_current;
 
@@ -38,7 +37,7 @@ export function CalcALP(p: number, x: number): Float32Array {
             P_pre2 = P_pre1;
             P_pre1 = P_current;
         }
-        Pnn = -(2 * m + 1) * sinTheta * Pnn;
+        Pnn = -(2 * m + 1) * sinTheta * Pnn;// Recurrence formula (1)
         m++; n = m;// should = loop + 1
         i = n * (n + 1) / 2 + m; buffer[i] = Pnn;
     }
