@@ -187,8 +187,8 @@ export class TreeBuilder {
     /** int[numBoxIndexFull]; link list for box index : Full -> NonEmpty */
     boxIndexMask: Int32Array;
     /** int[numBoxIndexTotal];  
-     *  link list for box index : NonEmpty -> Full
-     *  Szie: non-empty FMM boxes @ all levels
+     *  link list for box index : NonEmpty -> Full  
+     *  Size: non-empty FMM boxes @ all levels
      */
     boxIndexFull: Int32Array;
     /** int[numBoxIndexLeaf] */
@@ -308,8 +308,8 @@ levelOffset: ${this.levelOffset}
   numLevel -> numBoxIndex of max
   0 -> ? of 8 (fixed)
 ${Array.from(this.levelOffset)
-    .map((x, i) => { return i < this.maxLevel - 1 ? `  ${i+1} -> ${x - this.levelOffset[i + 1]} of ${1<<3*(i+2)}` : "" })
-    .join("\n")}
+                .map((x, i) => { return i < this.maxLevel - 1 ? `  ${i + 1} -> ${x - this.levelOffset[i + 1]} of ${1 << 3 * (i + 2)}` : "" })
+                .join("\n")}
 `);
         console.log(this);
 
