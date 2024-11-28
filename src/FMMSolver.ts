@@ -8,7 +8,7 @@ import { TreeBuilder } from './TreeBuilder';
 import { cart2sph, GetIndex3D, GetIndexFrom3D } from "./utils";
 
 import { debug_p2m } from './debug_p2m';
-import { debug_m2l } from './debug_m2l';
+import { debug_m2l, debug_m2l_p4 } from './debug_m2l';
 import { Debug_Id_Pair } from './Force';
 import { debug_l2p } from './debug_l2p';
 
@@ -210,6 +210,8 @@ export class FMMSolver {
 
                 const m2l_result = (() => {
                     const numLevel = 2;
+                    return debug_m2l_p4(this, numLevel, p2m_result, pair.src, pair.dst);
+
                     return debug_m2l(this, numLevel, p2m_result, pair.src, pair.dst);
                 })();
 
@@ -260,12 +262,13 @@ export class FMMSolver {
                     {
                         step: "l2p", result: l2p_result
                     },
-                    {step:"direct",result:direct_result}
+                    { step: "direct", result: direct_result }
                 ];
 
             });
 
             console.log(this.debug_results)
+            debugger;
 
         }
 
