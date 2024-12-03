@@ -8,6 +8,7 @@ import { FMMSolver } from './FMMSolver';
 
 //import { Tester } from './tester'
 import { DataStart, DataUpdate, Data_debug_AddWatch } from './Force';
+import { CalcALP_Test } from './AssociatedLegendrePolyn';
 
 async function main() {
     if (!navigator.gpu) {
