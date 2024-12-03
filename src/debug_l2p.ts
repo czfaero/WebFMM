@@ -255,7 +255,7 @@ function debug_l2p_shader2(debug_Lnm, box_id, index, buffers) {
 
         }
         // start from m++ -> 1
-        for (; m < max_n;) {
+        for (; m < max_n - 1;) {
             Pnn = -(2 * m + 1) * sinTheta * Pnn;// Recurrence formula (1)
             m++; r_m = r_m * r;
             let n = m, r_n = r_m;
@@ -263,8 +263,8 @@ function debug_l2p_shader2(debug_Lnm, box_id, index, buffers) {
 
             let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (1 - x2) // Recurrence formula (4)
             let Pnn_next_deriv = (n * x * Pnn_next - (n + m) * Pnn) / (x2 - 1) // Recurrence formula (5)
-            func(n, m, r_n, Pnn, Pnn_deriv);
-            func(n, -m, r_n, Pnn, Pnn_deriv);
+            func(n, m, m, r_n, Pnn, Pnn_deriv);
+            func(n, -m, m, r_n, Pnn, Pnn_deriv);
             n++; r_n = r_n * r;
             func(n, m, m, r_n, Pnn_next, Pnn_next_deriv);
             func(n, -m, m, r_n, Pnn_next, Pnn_next_deriv);
@@ -301,8 +301,13 @@ function debug_l2p_shader2(debug_Lnm, box_id, index, buffers) {
         let c = cart2sph(dist);
         let r = c.x; let theta = c.y; let phi = c.z;
         let accelR = 0, accelTheta = 0, accelPhi = 0;
+        let sinTheta = sin(theta), cosTheta = cos(theta), sinPhi = sin(phi), cosPhi = cos(phi);
 
+        let debug_count = 0;
         function proc(n, m, abs_m, r_n, Pnm, Pnm_d) {
+
+            debug_count++;
+            //console.log(`n=${n} m=${m} debug=${debug_count}`)
             let i_Lnm = n * n + n + m;
             let Lnm_real = Lnm[i_Lnm * 2], Lnm_imag = Lnm[i_Lnm * 2 + 1];
             let Ynm_fact = sqrt(factorial[n - abs_m] / factorial[n + abs_m]);
@@ -311,20 +316,30 @@ function debug_l2p_shader2(debug_Lnm, box_id, index, buffers) {
             let real = Lnm_real * cos(angle) - Lnm_imag * sin(angle);
             let imag = Lnm_real * cos(angle) - Lnm_imag * sin(angle);
             let d_r = n * r_n / r * Ynm_real * real;
-            let d_theta = -r_n / r * Ynm_fact * sin(theta) * Pnm_d;
-            let d_phi = m * r_n / r / sin(theta) * Ynm_real * imag;
+            let d_theta = -r_n / r * Ynm_fact * sinTheta * Pnm_d * real;
+            let d_phi = m * r_n / r / sinTheta * Ynm_real * imag;
             accelR += d_r;
             accelTheta += d_theta;
             accelPhi += d_phi;
+            //debugger;
         }
-        CalcALP_R(numExpansions, cos(theta), r, proc);
-        // to-do; 
+        CalcALP_R(numExpansions, cosTheta, r, proc);
 
+        let accelX = sinTheta * cosPhi * accelR
+            + cosTheta * cosPhi * accelTheta
+            - sinPhi * accelPhi;
+        let accelY = sinTheta * sinPhi * accelR
+            + cosTheta * sinPhi * accelTheta
+            - cosPhi * accelPhi;
+        let accelZ = cosTheta * accelR - sinTheta * accelTheta;
+        result[thread_id * 3] = accelX;
+        result[thread_id * 3 + 1] = accelY;
+        result[thread_id * 3 + 2] = accelZ;
+        //debugger;
     }
     const maxNodeCount = count;// to-do
     for (let i = 0; i <= maxNodeCount; i++) {
         thread(i);
-
     }
     return result;
 }

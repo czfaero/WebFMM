@@ -15,7 +15,7 @@ export function debug_m2l(core: FMMSolver, numLevel, debug_Mnm, src_box_id, dst_
     let jbd = dst_box_id + core.tree.levelOffset[numLevel - 1];
     let indexj = GetIndex3D(core.tree.boxIndexFull[jbd]);
     let jx = indexj.x, jy = indexj.y, jz = indexj.z;
-    let je =  GetIndexFrom3D({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3) + 1;
+    let je = GetIndexFrom3D({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3) + 1;
 
     const boxSize = core.tree.rootBoxSize / (1 << numLevel);
     const buffers = {
@@ -234,6 +234,30 @@ function debug_m2l_shader(debug_Mnm, mnmSource: number, je: number, buffers) {
 }
 
 
+/**
+ * tV! * tV! / (bV1! * ... * bV4!)  
+ * bV1 > bV2, bV3 > bV4, all < readyValues.length
+ * @param readyValues factorial buffer[i]= i! 
+ * @returns 
+ */
+export function factorialCombineM2L(tV: number, bV1, bV2, bV3, bV4, readyValues: ArrayLike<number>) {
+    const readyV = readyValues.length - 1;
+    if (tV <= readyV) {
+        return readyValues[tV] / readyValues[bV1] / readyValues[bV2]
+            * readyValues[tV] / readyValues[bV3] / readyValues[bV4];
+    }
+    let part1 = readyValues[tV] / readyValues[bV1] / readyValues[bV2];
+    let part2 = readyValues[tV] / readyValues[bV3] / readyValues[bV4]
+    for (let v = readyV + 1; v <= tV; v++) {
+        part1 *= v;
+        part2 *= v;
+    }
+    return part1 * part2;
+
+
+}
+
+
 export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, dst_box_id) {
     function oddeven(n) {
         if ((n & 1) == 1) { return -1; } else { return 1; }
@@ -273,13 +297,7 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
         }
         return vec3f(r, theta, phi);
     }
-    function CalcAnm(n: number, m: number, factorial: Float32Array) {
-        return oddeven(n) * inverseSqrt(factorial[n - m] * factorial[n + m]);
-    }
-    function CalcYnmFact(n: number, m: number, factorial: Float32Array) {
-        m = abs(m);
-        return sqrt(factorial[n - m] / factorial[n + m]);
-    }
+
 
 
 
@@ -291,7 +309,7 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
     for (let i = 0; i < numExpansion2 * 2; i++) {
         MnmSource[i] = debug_Mnm[i];
     }
-    const factorial = new Float32Array(2 * numExpansions); // accessed up to 2*(numExpansions-1)
+    const factorial = new Float64Array(2 * numExpansions);
     for (let i = 0, fact = 1; i < factorial.length; i++) {
         factorial[i] = fact;
         fact = fact * (i + 1);
@@ -307,7 +325,7 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
 
     const sph = cart2sph({ x: distX * boxSize, y: distY * boxSize, z: distZ * boxSize });
     const rho = sph.x, alpha = sph.y, beta = sph.z;
-    const Pnm = CalcALP(numExpansions, cos(alpha));
+    const Pnm = CalcALP(2 * numExpansions, cos(alpha));
     const rho_n = new Float32Array(numExpansions);
     for (let i = 0, v = 1; i < rho_n.length; i++) {
         rho_n[i] = v;
@@ -327,15 +345,13 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
         let L_real = 0, L_imag = 0;
         const j = ng[thread_id];
         const k = mg[thread_id]; // -j<=k<=j
-        const Ajk = CalcAnm(j, k, factorial);
+
         for (let n = 0; n < numExpansions; n++) {
             for (let m = -n; m <= n; m++) {
                 let i_Pnm = (j + n) * (j + n + 1) / 2 + abs(m - k);
-                const Anm = CalcAnm(n, m, factorial);
-                const A_under = CalcAnm(j + n, m - k, factorial);
-                const YnmFact = CalcYnmFact(j + n, m - k, factorial);
-                const C = oddeven((abs(k - m) - abs(k) - abs(m)) / 2) * Anm * Ajk * YnmFact * Pnm[i_Pnm]
-                    * oddeven(n) / A_under / rho_n[j] / rho_n[n] / rho;
+                const factorialStuff =
+                    factorialCombineM2L(j + n - abs(m - k), n - m, n + m, j - k, j + k, factorial);
+                const C = Pnm[i_Pnm] * oddeven(n) * oddeven((abs(k - m) - abs(k) - abs(m)) / 2) * sqrt(factorialStuff) / rho_n[j] / rho_n[n] / rho;
 
                 let i_src = n * n + n + m;
                 const O_real = MnmSource[2 * i_src + 0];
@@ -348,8 +364,9 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
                     ysin = O_imag * e_sin,
                     xsin = O_real * e_sin,
                     ycos = O_imag * e_cos;
-                L_real += xcos - ysin;
-                L_imag += xsin + ycos;
+                L_real += C * (xcos - ysin);
+                L_imag += C * (xsin + ycos);
+                if (isNaN(C)) { debugger; }
             }
         }
         debug_Lnm[thread_id * 2] += L_real;
