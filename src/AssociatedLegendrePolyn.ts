@@ -45,17 +45,19 @@ export function CalcALP(p: number, x: number): Float32Array {
 }
 
 /**
-     * Call the func, with:  
-     * n:  0 <= n < numExpansions  
-     * m: -n <= m <= n  
-     * m_abs: abs(m)
-     * r_n : r^n  
-     * p : Associated Legendre polynomials for n, m at x=cos(theta).  
-     * p_d: Derivative by theta of p at x. 
-     * @param numExpansions
-     * @param x cos(theta)
-     * @param func 
-     */
+ * Calcuate something about X=(r,theta,phi)   
+ * As a piece of data is calc, "func" will be called with:  
+ * n:  0 <= n < numExpansions  
+ * m: -n <= m <= n  
+ * m_abs: abs(m)
+ * r_n : r^n  
+ * p : Associated Legendre polynomials for n, m at x=cos(theta).  
+ * p_d: Derivative of Associated Legendre polynomials. By theta at x. 
+ * @param numExpansions
+ * @param theta Spherical coordinate
+ * @param r Spherical coordinate
+ * @param {function} func callback function
+ */
 export function CalcALP_R(numExpansions: number, theta: number, r: number, func: Function) {
     const sqrt = Math.sqrt;
     const eps = 1e-6;
@@ -209,10 +211,12 @@ export function CalcALP_Test(theta) {
     const test2 = new Float32Array(bufferSize);
     const test2_derivative = new Float32Array(bufferSize);
     const test_R = 1.1;
+    let counter = 0;
     CalcALP_R(numExpansions, theta, test_R, (n, m, m_abs, r_n, P, P_deriv) => {
         let i = n * (n + 1) / 2 + m_abs;
         test2[i] = P;
-        test2_derivative[i] = P_deriv
+        test2_derivative[i] = P_deriv;
+        counter++;
 
         if (!CompareNumber(r_n, Math.pow(test_R, n))) {
             debugger;
@@ -222,6 +226,7 @@ export function CalcALP_Test(theta) {
         //     debugger;
         // }
     });
+    if (counter != numExpansions * numExpansions) { debugger; }
 
     const errors1 = VerifyFloatBuffer(testCase, test1);
     const errors2 = VerifyFloatBuffer(testCase, test2);
