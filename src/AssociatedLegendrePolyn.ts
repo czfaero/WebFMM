@@ -50,19 +50,26 @@ export function CalcALP(p: number, x: number): Float32Array {
      * m: -n <= m <= n  
      * m_abs: abs(m)
      * r_n : r^n  
-     * p : Associated Legendre polynomials for n, m at x.  
-     * p_d: Derivative of p at x. 
+     * p : Associated Legendre polynomials for n, m at x=cos(theta).  
+     * p_d: Derivative by theta of p at x. 
      * @param numExpansions
      * @param x cos(theta)
      * @param func 
      */
-export function CalcALP_R(numExpansions: number, x: number, r: number, func: Function) {
+export function CalcALP_R(numExpansions: number, theta: number, r: number, func: Function) {
     const sqrt = Math.sqrt;
+    const eps = 1e-6;
     let i: number;
     const max_n = numExpansions - 1;
 
-    const x2 = x * x;
-    const sinTheta = sqrt(1 - x2);
+    const x = Math.cos(theta);
+    let sinTheta = Math.sin(theta);
+
+    if (sinTheta < eps) {
+        sinTheta = eps;
+    }
+
+
 
     let Pnn = 1; // start from P00
     let r_m = 1; // r^m
@@ -77,8 +84,8 @@ export function CalcALP_R(numExpansions: number, x: number, r: number, func: Fun
 
         let Pnn_next = x * (2 * m + 1) * Pnn; // Recurrence formula (2)
 
-        let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (1 - x2) // Recurrence formula (4)
-        let Pnn_next_deriv = (n * x * Pnn_next - (n + m) * Pnn) / (x2 - 1) // Recurrence formula (5)
+        let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (sinTheta) // Recurrence formula (4)
+        let Pnn_next_deriv = (n * x * Pnn_next - (n + m) * Pnn) / sinTheta // Recurrence formula (5)
 
         func(0, m, m, r_m, Pnn, Pnn_deriv);
         func(n, m, m, r_n, Pnn_next, Pnn_next_deriv);
@@ -88,7 +95,7 @@ export function CalcALP_R(numExpansions: number, x: number, r: number, func: Fun
         for (; n < max_n;) {
             n++; r_n = r_n * r;
             const P_current = ((2 * n - 1) * x * P_pre1 - (n + m - 1) * P_pre2) / (n - m);// Recurrence formula (3)
-            const P_deriv = (n * x * P_current - (n + m) * P_pre1) / (x2 - 1) // Recurrence formula (5)
+            const P_deriv = (n * x * P_current - (n + m) * P_pre1) / (sinTheta) // Recurrence formula (5)
             func(n, m, m, r_n, P_current, P_deriv);
             P_pre2 = P_pre1;
             P_pre1 = P_current;
@@ -101,12 +108,12 @@ export function CalcALP_R(numExpansions: number, x: number, r: number, func: Fun
         m++; r_m = r_m * r;
         let n = m, r_n = r_m;
         let Pnn_next = x * (2 * m + 1) * Pnn; // Recurrence formula (2)
-
-        let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (1 - x2) // Recurrence formula (4)
-        let Pnn_next_deriv = (n * x * Pnn_next - (n + m) * Pnn) / (x2 - 1) // Recurrence formula (5)
-        func(n, m, m, r_n, Pnn, Pnn_deriv);
-        func(n, -m, m, r_n, Pnn, Pnn_deriv);
-        n++; r_n = r_n * r;
+        n++;
+        let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (sinTheta) // Recurrence formula (4)
+        let Pnn_next_deriv = (n * x * Pnn_next - (n + m) * Pnn) / (sinTheta) // Recurrence formula (5)
+        func(n - 1, m, m, r_n, Pnn, Pnn_deriv);
+        func(n - 1, -m, m, r_n, Pnn, Pnn_deriv);
+        r_n = r_n * r;
         func(n, m, m, r_n, Pnn_next, Pnn_next_deriv);
         func(n, -m, m, r_n, Pnn_next, Pnn_next_deriv);
 
@@ -115,7 +122,7 @@ export function CalcALP_R(numExpansions: number, x: number, r: number, func: Fun
         for (; n < max_n;) {
             n++; r_n = r_n * r;
             const P_current = ((2 * n - 1) * x * P_pre1 - (n + m - 1) * P_pre2) / (n - m);// Recurrence formula (3)
-            const P_deriv = (n * x * P_current - (n + m) * P_pre1) / (x2 - 1) // Recurrence formula (5)
+            const P_deriv = (n * x * P_current - (n + m) * P_pre1) / (sinTheta) // Recurrence formula (5)
             func(n, m, m, r_n, P_current, P_deriv);
             func(n, -m, m, r_n, P_current, P_deriv);
             P_pre2 = P_pre1;
@@ -126,11 +133,11 @@ export function CalcALP_R(numExpansions: number, x: number, r: number, func: Fun
     {
         Pnn = -(2 * m + 1) * sinTheta * Pnn;// Recurrence formula (1)
         m++; r_m = r_m * r;
-        let n = m, r_n = r_m;
+        let n = m + 1;// r_n = r_m * r;
         let Pnn_next = x * (2 * m + 1) * Pnn; // Recurrence formula (2)
-        let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (1 - x2) // Recurrence formula (4)
-        func(n, m, m, r_n, Pnn, Pnn_deriv);
-        func(n, -m, m, r_n, Pnn, Pnn_deriv);
+        let Pnn_deriv = ((n - m) * Pnn_next - n * x * Pnn) / (sinTheta) // Recurrence formula (4)
+        func(n - 1, m, m, r_m, Pnn, Pnn_deriv);
+        func(n - 1, -m, m, r_m, Pnn, Pnn_deriv);
     }
 }
 
@@ -140,11 +147,12 @@ export function CalcALP_R(numExpansions: number, x: number, r: number, func: Fun
 export function CalcALP_Test(theta) {
     console.log(`Test CalcALP for theta=${theta}`)
     const sin = Math.sin, cos = Math.cos;
-    const s = sin(theta), c = cos(theta);
+    let s = sin(theta), c = cos(theta);
 
     const numExpansions = 5;
     const bufferSize = numExpansions * (numExpansions + 1) / 2;
     const testCase = new Float32Array(bufferSize);
+    const testCase_derivative = new Float32Array(bufferSize);
     const i2n = new Array(bufferSize), i2m = new Array(bufferSize);
 
     [
@@ -169,37 +177,81 @@ export function CalcALP_Test(theta) {
         i2n[i] = n;
         i2m[i] = m;
         testCase[i] = P;
-    })
-    const test1 = CalcALP(5, c);
+    });
+
+    [
+        [0, 0, 0],
+        [1, 0, -s],
+        [1, 1, -c],
+        [2, 0, -3 * c * s],
+        [2, 1, 3 * (s * s - c * c)],
+        [2, 2, 6 * s * c],
+        [3, 0, 1.5 * s - 7.5 * c * c * s],
+        [3, 1, 15 * c * s * s - 7.5 * c * c * c + 1.5 * c],
+        [3, 2, 30 * c * c * s - 15 * s * s * s],
+        [3, 3, -45 * s * s * c],
+        [4, 0, 7.5 * c * s - 17.5 * c * c * c * s],
+        [4, 1, -17.5 * c * c * c * c + 7.5 * c * c + 52.5 * c * c * s * s - 7.5 * s * s],
+        [4, 2, -105 * c * s * s * s + 105 * s * c * c * c - 15 * s * c],
+        [4, 3, 105 * s * s * s * s - 315 * c * c * s * s],
+        [4, 4, 420 * s * s * s * c],
+
+    ].forEach(data => {
+        let n = data[0], m = data[1], P = data[2];
+        let i = n * (n + 1) / 2 + m;
+        testCase_derivative[i] = P;
+    });
+
+
+    // const getP = (n, m) => testCase[n * (n + 1) / 2 + m];
+
+    const test1 = CalcALP(numExpansions, c);
     const test2 = new Float32Array(bufferSize);
-    CalcALP_R(5, c, 1, (n, m, m_abs, r_n, P, P_deriv) => {
-        test2[n * (n + 1) / 2 + m_abs] = P;
+    const test2_derivative = new Float32Array(bufferSize);
+    const test_R = 1.1;
+    CalcALP_R(numExpansions, theta, test_R, (n, m, m_abs, r_n, P, P_deriv) => {
+        let i = n * (n + 1) / 2 + m_abs;
+        test2[i] = P;
+        test2_derivative[i] = P_deriv
+
+        if (!CompareNumber(r_n, Math.pow(test_R, n))) {
+            debugger;
+        }
+        // if (i == 4) {
+        //     let p_d = (2 * c * getP(2, 1) - 3 * getP(1, 1)) / (-s * s) * (-s);
+        //     debugger;
+        // }
     });
 
     const errors1 = VerifyFloatBuffer(testCase, test1);
     const errors2 = VerifyFloatBuffer(testCase, test2);
-    [errors1, errors2].forEach(errors => {
+    const errors3 = VerifyFloatBuffer(testCase_derivative, test2_derivative);
+    [errors1, errors2, errors3].forEach(errors => {
         errors.forEach(record => {
             record.n = i2n[record.i];
             record.m = i2m[record.i];
         });
     })
     if (errors1.length != 0) {
-        errors1.push(test1)
         console.log("Test for CalcALP():", errors1);
-        console.log(Array.from(test1).map((v, i) => { return { n: i2n[i], m: i2m[i], v: v } }));
+        console.log(Array.from(test1).map((v, i) => { return { n: i2n[i], m: i2m[i], v: v, i: i } }));
     }
     if (errors2.length != 0) {
-        errors2.push(test2)
         console.log("Test for CalcALP_R():", errors2);
-        console.log(Array.from(test2).map((v, i) => { return { n: i2n[i], m: i2m[i], v: v } }));
+        console.log(Array.from(test2).map((v, i) => { return { n: i2n[i], m: i2m[i], v: v, i: i } }));
+    }
+
+    if (errors3.length != 0) {
+        console.log("Test for CalcALP_R() derivative:", errors3);
+        console.log(Array.from(test2_derivative).map((v, i) => { return { n: i2n[i], m: i2m[i], v: v, i: i } }));
+        debugger;
     }
 }
-
+function CompareNumber(a: number, b: number, delta = 0.002) {
+    return Math.abs(a - b) < delta
+}
 function VerifyFloatBuffer(expect: ArrayLike<number>, data: ArrayLike<number>, max_error = 0.001) {
-    function CompareNumber(a: number, b: number, delta = 0.002) {
-        return Math.abs(a - b) < delta
-    }
+
     if (data.length != expect.length) {
         console.log(data);
         throw `size: ${data.length}!=${expect.length}`;
