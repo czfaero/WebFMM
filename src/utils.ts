@@ -5,6 +5,7 @@ const acos = Math.acos;
 const atan = Math.atan;
 const cos = Math.cos;
 const sin = Math.sin;
+const sign=Math.sign;
 const PI = Math.PI;
 
 class vec3f {
@@ -61,6 +62,12 @@ export function GetIndexFrom3D(boxIndex3D, numLevel: number) {
     }
     return boxIndex
 }
+
+/**
+ * 
+ * @param d 
+ * @returns (r, theta, phi); 0 <= theta <= PI
+ */
 export function cart2sph(d) {
     const eps = 1e-6;
     var r = sqrt(d.x * d.x + d.y * d.y + d.z * d.z) + eps;
@@ -70,7 +77,7 @@ export function cart2sph(d) {
         phi = 0;
     }
     else if (abs(d.x) < eps) {
-        phi = d.y / abs(d.y) * PI * 0.5;
+        phi = sign(d.y) * PI * 0.5;
     }
     else if (d.x > 0) {
         phi = atan(d.y / d.x);
