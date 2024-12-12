@@ -21,6 +21,11 @@ async function main() {
     const links = await GetLinks();
     const colors = await GetNodeColors();
 
+    // CalcALP_Test(0.5);
+    // CalcALP_Test(1);
+    // CalcALP_Test(3.14);
+    // CalcALP_Test(0);
+
     //const tester = new Tester();
 
     // const solver = new FMMSolver(nodes, "wgpu");
