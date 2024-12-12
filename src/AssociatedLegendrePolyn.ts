@@ -49,17 +49,18 @@ export function CalcALP(p: number, x: number): Float32Array {
  * As a piece of data is calc, "func" will be called with:  
  * n:  0 <= n < numExpansions  
  * m: -n <= m <= n  
- * m_abs: abs(m)
+ * m_abs: abs(m)  
  * r_n : r^n  
  * p : Associated Legendre polynomials for n, m at x=cos(theta).  
  * p_d: Derivative of Associated Legendre polynomials. By theta at x. 
  * @param numExpansions
- * @param theta Spherical coordinate
+ * @param theta Spherical coordinate, 0<= theta <= PI
  * @param r Spherical coordinate
  * @param {function} func callback function
  */
 export function CalcALP_R(numExpansions: number, theta: number, r: number, func: Function) {
     const sqrt = Math.sqrt;
+    const abs = Math.abs
     const eps = 1e-6;
     let i: number;
     const max_n = numExpansions - 1;
@@ -67,8 +68,12 @@ export function CalcALP_R(numExpansions: number, theta: number, r: number, func:
     const x = Math.cos(theta);
     let sinTheta = Math.sin(theta);
 
+
     if (sinTheta < eps) {
         sinTheta = eps;
+    }
+    if (sinTheta < 0) {
+        throw "sinTheta<0"
     }
 
 
