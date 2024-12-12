@@ -5,7 +5,7 @@ const acos = Math.acos;
 const atan = Math.atan;
 const cos = Math.cos;
 const sin = Math.sin;
-const sign=Math.sign;
+const sign = Math.sign;
 const PI = Math.PI;
 
 class vec3f {
@@ -65,7 +65,7 @@ export function GetIndexFrom3D(boxIndex3D, numLevel: number) {
 
 /**
  * 
- * @param d 
+ * @param {object} d {x,y,z} distance
  * @returns (r, theta, phi); 0 <= theta <= PI
  */
 export function cart2sph(d) {
