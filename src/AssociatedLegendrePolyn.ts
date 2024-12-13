@@ -1,5 +1,5 @@
 // 
-
+import { cart2sph } from "./utils";
 
 /**
  * Calc Associated Legendre polynomials for given x=cos(theta) and p.  
@@ -286,4 +286,90 @@ function VerifyFloatBuffer(expect: ArrayLike<number>, data: ArrayLike<number>, m
         console.log("Failure");
     }
     return errors;
+}
+
+/**
+ * Verify $frac{1}{r^\prime}=\sum_{n=0}^\infty \frac{\rho^n}{r^{n+1}}P_n(u)$
+ * @param {object} Q {x,y,z} src (here is the charge)
+ * @param {object} P {x,y,z} dst
+ */
+export function Test_MultipoleExpansion(Q, P) {
+    console.log("Test_MultipoleExpansion:", Q, P);
+    const sin = Math.sin, cos = Math.cos;
+    const _q = cart2sph(Q), _p = cart2sph(P);
+    const rho = _q.x, alpha = _q.y, beta = _q.z;
+    const r = _p.x, theta = _p.y, phi = _p.z;
+    console.log(`Spherical:
+Q(${rho},${alpha},${beta})
+P(${r},${theta},${phi})`);
+
+    const numExpansions = 10;
+
+    const getDist = (a, b) => { return { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z }; }
+    const getLength = (vec) => Math.sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
+    const r_dash = getLength(getDist(P, Q));
+    const left = 1 / r_dash;
+
+
+    const cosGamma = cos(theta) * cos(alpha) + sin(theta) * sin(alpha) * cos(phi - beta);
+
+    const Pnm = CalcALP(numExpansions, cosGamma);
+    let result = 0;
+    let mu = rho / r;
+    const m = 0;
+    for (let n = 0; n < numExpansions; n++) {
+        let i = n * (n + 1) / 2 + m;
+        result += Pnm[i] * Math.pow(mu, n) / r;
+    }
+    console.log(`Left: `, left, "  r'=", r_dash)
+    console.log(`Right: `, result)
+    console.log(`error: `, left - result);
+    console.log(`Test_MultipoleExpansion End`);
+    // debugger;
+}
+
+/**
+ * Verify P(\cos\gamma)=\sum_{m=-n}^n  Y_{n}^{-m}(\alpha,\beta) \cdot Y_{n}^{m}(\theta,\phi)
+ * @param {object} Q {x,y,z} src
+ * @param {object} P {x,y,z} dst
+ */
+export function Test_AdditionTheorem(Q, P) {
+    console.log("Test_AdditionTheorem:", Q, P);
+    const sin = Math.sin, cos = Math.cos;
+    const _q = cart2sph(Q), _p = cart2sph(P);
+    const rho = _q.x, alpha = _q.y, beta = _q.z;
+    const r = _p.x, theta = _p.y, phi = _p.z;
+
+
+    const cosGamma = cos(theta) * cos(alpha) + sin(theta) * sin(alpha) * cos(phi - beta);
+
+    const numExpansions = 10;
+    const Pnm = CalcALP(numExpansions, cosGamma);
+
+    const Pnm_alpha = CalcALP(numExpansions, cos(alpha));
+    const Pnm_theta = CalcALP(numExpansions, cos(theta));
+    let factorial = new Float32Array(2 * numExpansions);
+    for (let m = 0, fact = 1.0; m < factorial.length; m++) {
+        factorial[m] = fact;
+        fact = fact * (m + 1);
+    }
+
+    for (let n = 0; n < numExpansions; n++) {
+        let i = n * (n + 1) / 2 + 0;
+        const P_n = Pnm[i];
+        let real = 0, imag = 0;
+        for (let m = -n; m <= n; m++) {
+            let abs_m = Math.abs(m);
+            i = n * (n + 1) / 2 + abs_m;
+            let fact = factorial[n - abs_m] / factorial[n + abs_m];
+            let same = fact * Pnm_alpha[i] * Pnm_theta[i];
+            let re = cos(-m * beta) * cos(m * phi) - sin(-m * beta) * sin(m * phi);
+            let im = cos(-m * beta) * sin(m * phi) + sin(-m * beta) * cos(m * phi);
+            real += re * same;
+            imag += im * same;
+        }
+        const error = P_n - real;
+        console.log(`P_${n}=`, P_n, " error=", error, "\nreal=", real, "imag", imag);
+    }
+    console.log(`Test_AdditionTheorem End`);
 }
