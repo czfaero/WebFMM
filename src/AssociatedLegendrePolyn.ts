@@ -294,7 +294,8 @@ function VerifyFloatBuffer(expect: ArrayLike<number>, data: ArrayLike<number>, m
  * @param {object} P {x,y,z} dst
  */
 export function Test_MultipoleExpansion(Q, P) {
-    console.log("Test_MultipoleExpansion:", Q, P);
+    const numExpansions = 5;
+    console.log(`Test_MultipoleExpansion@${numExpansions}:`, Q, P);
     const sin = Math.sin, cos = Math.cos;
     const _q = cart2sph(Q), _p = cart2sph(P);
     const rho = _q.x, alpha = _q.y, beta = _q.z;
@@ -303,7 +304,7 @@ export function Test_MultipoleExpansion(Q, P) {
 Q(${rho},${alpha},${beta})
 P(${r},${theta},${phi})`);
 
-    const numExpansions = 10;
+
 
     const getDist = (a, b) => { return { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z }; }
     const getLength = (vec) => Math.sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
@@ -312,14 +313,17 @@ P(${r},${theta},${phi})`);
 
 
     const cosGamma = cos(theta) * cos(alpha) + sin(theta) * sin(alpha) * cos(phi - beta);
-
+    console.log("cosGamma", cosGamma);
+    // CalcALP_Test(Math.acos(cosGamma))
     const Pnm = CalcALP(numExpansions, cosGamma);
     let result = 0;
     let mu = rho / r;
     const m = 0;
     for (let n = 0; n < numExpansions; n++) {
         let i = n * (n + 1) / 2 + m;
-        result += Pnm[i] * Math.pow(mu, n) / r;
+        const Pn = Pnm[i];
+        const mu_n = Math.pow(mu, n)
+        result += Pn * mu_n / r;
     }
     console.log(`Left: `, left, "  r'=", r_dash)
     console.log(`Right: `, result)
