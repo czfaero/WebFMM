@@ -11,6 +11,7 @@ import { debug_p2m } from './debug_p2m';
 import { debug_m2l, debug_m2l_p4 } from './debug_m2l';
 import { Debug_Id_Pair } from './Force';
 import { debug_l2p } from './debug_l2p';
+import { debug_m2p } from './debug_m2p';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -216,6 +217,8 @@ export class FMMSolver {
                 })();
 
                 const l2p_result = debug_l2p(this, m2l_result, pair.dst);
+
+                const m2p_result = debug_m2p(this, p2m_result, pair.src, pair.dst);
                 let direct_result;
                 // p2p
                 {
@@ -223,13 +226,11 @@ export class FMMSolver {
                     const dst_count = tree.particleOffset[1][pair.dst] - dst_start + 1;
                     const src_start = tree.particleOffset[0][pair.src];
                     const src_count = tree.particleOffset[1][pair.src] - src_start + 1;
-
+                    
                     direct_result = new Float32Array(dst_count * 3);
                     function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
                     function inverseSqrt(x) { return 1 / Math.sqrt(x); }
                     const eps = 1e-6;
-                    const PI = 3.14159265358979323846;
-                    const inv4PI = 0.25 / PI;
                     for (let dst_i = 0; dst_i < dst_count; dst_i++) {
 
                         let accel = { x: 0, y: 0, z: 0 };
@@ -242,11 +243,10 @@ export class FMMSolver {
                                 z: dst.z - src.z
                             };
                             let invDist = inverseSqrt(dot(dist, dist) + eps);
-                            let invDistCube = invDist * invDist * invDist;
-                            let s = 1 * invDistCube;
-                            accel.x += -s * inv4PI * dist.x;
-                            accel.y += -s * inv4PI * dist.y;
-                            accel.z += -s * inv4PI * dist.z;
+                            let s = invDist * invDist * invDist;
+                            accel.x += -s * dist.x;
+                            accel.y += -s * dist.y;
+                            accel.z += -s * dist.z;
                         }
                         direct_result[dst_i * 3] = accel.x;
                         direct_result[dst_i * 3 + 1] = accel.y;
@@ -263,6 +263,7 @@ export class FMMSolver {
                         step: "l2p", result: l2p_result
                     },
                     { step: "direct", result: direct_result }
+                    , { step: "m2p", result: m2p_result }
                 ];
 
             });
@@ -337,7 +338,7 @@ export class FMMSolver {
         this.tree = tree;
 
         // constants
-        this.numExpansions = 10;
+        this.numExpansions = 16;
         this.numExpansion2 = this.numExpansions * this.numExpansions;
         this.numExpansion4 = this.numExpansion2 * this.numExpansion2;
         this.numCoefficients = this.numExpansions * (this.numExpansions + 1) / 2;
