@@ -294,7 +294,7 @@ function VerifyFloatBuffer(expect: ArrayLike<number>, data: ArrayLike<number>, m
  * @param {object} P {x,y,z} dst
  */
 export function Test_MultipoleExpansion(Q, P) {
-    const numExpansions = 10;
+    const numExpansions = 20;
     console.log(`Test_MultipoleExpansion@${numExpansions}:`, Q, P);
     const sin = Math.sin, cos = Math.cos;
     const _q = cart2sph(Q), _p = cart2sph(P);
@@ -320,15 +320,21 @@ P(${r},${theta},${phi})`);
         return;
     }
     const m = 0;
+    let errors = [];
     for (let n = 0; n < numExpansions; n++) {
         let i = n * (n + 1) / 2 + m;
         const Pn = Pnm[i];
-        const mu_n = Math.pow(mu, n)
-        result += Pn * mu_n / r;
+        // const mu_n = Math.pow(mu, n);
+        let temp = Pn / r;
+        for (let _ = 0; _ < n; _++) { // may be more accurate. don'n know.
+            temp *= mu;
+        }
+        result += temp;
+        errors.push(left - result);
     }
     console.log(`Left: `, left, "  r'=", r_dash)
     console.log(`Right: `, result)
-    console.log(`error: `, left - result);
+    console.log(`error: `, errors);
     console.log(`Test_MultipoleExpansion End`);
     // debugger;
 }
