@@ -31,10 +31,10 @@ async function main() {
         }
         return { x: a, y: b, z: c }
     }
-    Test_MultipoleExpansion(v3(-25, -18.5, -10), v3(-18.5, -6, -3.5));
-    Test_MultipoleExpansion(v3(-18.5, -6, -3.5), v3(-25, -18.5, -10));
+    // Test_MultipoleExpansion(v3(-25, -18.5, -10), v3(-18.5, -6, -3.5));
+    // Test_MultipoleExpansion(v3(-18.5, -6, -3.5), v3(-25, -18.5, -10));
     // Test_AdditionTheorem(v3(2, 0, 0), v3(2, 0, 2));
-    Test_AdditionTheorem(v3(-25, -18.5, -10), v3(-18.5, -6, -3.5));
+    // Test_AdditionTheorem(v3(-25, -18.5, -10), v3(-18.5, -6, -3.5));
 
     //const tester = new Tester();
 
