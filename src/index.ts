@@ -8,7 +8,7 @@ import { FMMSolver } from './FMMSolver';
 
 //import { Tester } from './tester'
 import { DataStart, DataUpdate, Data_debug_AddWatch } from './Force';
-import { CalcALP_Test, Test_AdditionTheorem, Test_MultipoleExpansion } from './AssociatedLegendrePolyn';
+import { Test_CalcALP as Test_CalcALP, Test_AdditionTheorem, Test_MultipoleExpansion } from './AssociatedLegendrePolyn';
 
 async function main() {
     if (!navigator.gpu) {
@@ -21,10 +21,10 @@ async function main() {
     const links = await GetLinks();
     const colors = await GetNodeColors();
 
-    // CalcALP_Test(0.5);
-    // CalcALP_Test(1);
-    // CalcALP_Test(3.14);
-    // CalcALP_Test(0);
+    // Test_CalcALP(0.5);
+    // Test_CalcALP(1);
+    // Test_CalcALP(3.14);
+    // Test_CalcALP(0);
     const v3 = (a, b, c) => {
         if (Array.isArray(a)) {
             return { x: a[0], y: a[1], z: a[2] }

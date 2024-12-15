@@ -151,7 +151,7 @@ export function CalcALP_R(numExpansions: number, theta: number, r: number, func:
 /**
  * Test functions above using "Reparameterization in terms of angles", only for sin(theta)>=0
  *  */
-export function CalcALP_Test(theta) {
+export function Test_CalcALP(theta) {
     console.log(`Test CalcALP for theta=${theta}`)
     const sin = Math.sin, cos = Math.cos;
     let s = sin(theta), c = cos(theta);
