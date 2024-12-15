@@ -294,7 +294,7 @@ function VerifyFloatBuffer(expect: ArrayLike<number>, data: ArrayLike<number>, m
  * @param {object} P {x,y,z} dst
  */
 export function Test_MultipoleExpansion(Q, P) {
-    const numExpansions = 5;
+    const numExpansions = 10;
     console.log(`Test_MultipoleExpansion@${numExpansions}:`, Q, P);
     const sin = Math.sin, cos = Math.cos;
     const _q = cart2sph(Q), _p = cart2sph(P);
@@ -304,13 +304,10 @@ export function Test_MultipoleExpansion(Q, P) {
 Q(${rho},${alpha},${beta})
 P(${r},${theta},${phi})`);
 
-
-
     const getDist = (a, b) => { return { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z }; }
     const getLength = (vec) => Math.sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
     const r_dash = getLength(getDist(P, Q));
     const left = 1 / r_dash;
-
 
     const cosGamma = cos(theta) * cos(alpha) + sin(theta) * sin(alpha) * cos(phi - beta);
     console.log("cosGamma", cosGamma);
@@ -318,6 +315,10 @@ P(${r},${theta},${phi})`);
     const Pnm = CalcALP(numExpansions, cosGamma);
     let result = 0;
     let mu = rho / r;
+    if (mu >= 1) {
+        console.log("Test_MultipoleExpansion End: should meet the contidition r > rho");
+        return;
+    }
     const m = 0;
     for (let n = 0; n < numExpansions; n++) {
         let i = n * (n + 1) / 2 + m;
