@@ -60,13 +60,14 @@ function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers) {
         return { x: x, y: y, z: z }
     }
     function vec3_minus(v) { return { x: -v.x, y: -v.y, z: -v.z } }
+    function vec3_scale(v, a) { return { x: v.x * a, y: v.y * a, z: v.z * a }; }
 
     const uniforms = buffers.uniforms;
 
     let boxSize = uniforms.boxSize;
     let index3D = GetIndex3D(u32(src_index));
     let boxMin = vec3f(uniforms.boxMinX, uniforms.boxMinY, uniforms.boxMinZ);
-    let boxCenter = vec3_add([index3D, vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
+    let boxCenter = vec3_add([vec3_scale(index3D, boxSize), vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
 
     console.log("-- debug m2p --");
     console.log(`src`)
@@ -100,7 +101,7 @@ function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers) {
         }
         let accelR = 0, accelTheta = 0, accelPhi = 0;
         let sinTheta = sin(theta), cosTheta = cos(theta), sinPhi = sin(phi), cosPhi = cos(phi);
-
+        if (abs(sinTheta) < eps) { sinTheta = eps; }
 
         function proc(n, m, abs_m, r_n, Pnm, Pnm_d) {
 
