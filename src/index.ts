@@ -8,7 +8,7 @@ import { FMMSolver } from './FMMSolver';
 
 //import { Tester } from './tester'
 import { DataStart, DataUpdate, Data_debug_AddWatch } from './Force';
-import { Test_CalcALP as Test_CalcALP, Test_AdditionTheorem, Test_MultipoleExpansion } from './kernel_ts/AssociatedLegendrePolyn';
+import { Test_CalcALP as Test_CalcALP, Test_AdditionTheorem, Test_MultipoleExpansion } from './FMMKernel_ts/AssociatedLegendrePolyn';
 
 async function main() {
     if (!navigator.gpu) {
