@@ -4,7 +4,7 @@ export class TreeBuilder {
     nodeBuffer: Float32Array;
     colorBuffer: Float32Array;
     linkBuffer: Uint32Array;
-    particleCount: number;
+    nodeCount: number;
     getNode(i: number) {
         const nodeBuffer = this.nodeBuffer;
         return {
@@ -26,7 +26,7 @@ export class TreeBuilder {
             zmin = 1000000,
             zmax = -1000000;
 
-        for (let i = 0; i < this.particleCount; i++) {
+        for (let i = 0; i < this.nodeCount; i++) {
             const { x, y, z } = this.getNode(i);
             xmin = Math.min(xmin, x);
             xmax = Math.max(xmax, x);
@@ -42,7 +42,7 @@ export class TreeBuilder {
 
         this.rootBoxSize = 0;
         this.rootBoxSize = Math.max(this.rootBoxSize, xmax - xmin, ymax - ymin, zmax - zmin);
-        this.rootBoxSize *= 1.00001; // Keep particle on the edge from falling out
+        this.rootBoxSize *= 1.00001; // Keep node on the edge from falling out
 
     };
     maxLevel: number;
@@ -54,7 +54,7 @@ export class TreeBuilder {
 
         this.maxLevel = 2;
         for (const level of level_switch) {
-            if (this.particleCount >= level) {
+            if (this.nodeCount >= level) {
                 this.maxLevel++;
             } else {
                 break;
@@ -66,12 +66,12 @@ export class TreeBuilder {
 
     /**@return Array, box id for every partical*/
     morton(): Int32Array {
-        const particleBuffer = this.nodeBuffer;
+        const nodeBuffer = this.nodeBuffer;
         const maxLevel = this.maxLevel;
-        const particleCount = particleBuffer.length / 4;
-        const resultIndex = new Int32Array(particleCount);
+        const nodeCount = nodeBuffer.length / 4;
+        const resultIndex = new Int32Array(nodeCount);
         const boxSize = this.rootBoxSize / (1 << maxLevel);
-        for (let nodeIndex = 0; nodeIndex < particleCount; nodeIndex++) {
+        for (let nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++) {
             const { x, y, z } = this.getNode(nodeIndex);
             let nx = Math.floor((x - this.boxMinX) / boxSize),
                 ny = Math.floor((y - this.boxMinY) / boxSize),
@@ -100,9 +100,9 @@ export class TreeBuilder {
     */
     sort(mortonIndex: Int32Array) {
         const tempSortIndex = new Int32Array(this.numBoxIndexFull);
-        const sortValue = new Int32Array(this.particleCount);
-        const sortIndex = new Int32Array(this.particleCount);
-        for (let i = 0; i < this.particleCount; i++) {
+        const sortValue = new Int32Array(this.nodeCount);
+        const sortIndex = new Int32Array(this.nodeCount);
+        for (let i = 0; i < this.nodeCount; i++) {
             sortIndex[i] = i;
         }
         tempSortIndex.fill(0);
@@ -112,14 +112,14 @@ export class TreeBuilder {
         for (let i = 1; i < this.numBoxIndexFull; i++) {
             tempSortIndex[i] += tempSortIndex[i - 1];
         }
-        for (let i = this.particleCount - 1; i >= 0; i--) {
+        for (let i = this.nodeCount - 1; i >= 0; i--) {
             tempSortIndex[mortonIndex[i]]--;
             sortValue[tempSortIndex[mortonIndex[i]]] = mortonIndex[i];
             sortIndex[tempSortIndex[mortonIndex[i]]] = i;
         }
         return { sortValue, sortIndex }
     }
-    sortParticles() {
+    sortNodes() {
         const mortonIndex = this.morton();
         const { sortValue, sortIndex } = this.sort(mortonIndex);
         //console.log(sortValue)
@@ -127,7 +127,7 @@ export class TreeBuilder {
         const tempNodes = new Float32Array(this.nodeBuffer.length);
         const tempColor = new Float32Array(this.colorBuffer.length);
         const inverseSortIndex = new Uint32Array(sortIndex.length);
-        for (let i = 0; i < this.particleCount; i++) {
+        for (let i = 0; i < this.nodeCount; i++) {
             const offset = sortIndex[i] * 4;
             tempNodes.set(this.nodeBuffer.subarray(offset, offset + 4), i * 4);
             const offset3 = sortIndex[i] * 3;
@@ -154,7 +154,7 @@ export class TreeBuilder {
     countNonEmptyBoxes(sortValue) {
         this.numBoxIndexLeaf = 0;
         let currentIndex = -1;
-        for (let i = 0; i < this.particleCount; i++) {
+        for (let i = 0; i < this.nodeCount; i++) {
             if (sortValue[i] != currentIndex) {
                 this.numBoxIndexLeaf++;
                 currentIndex = sortValue[i];
@@ -164,7 +164,7 @@ export class TreeBuilder {
         this.numBoxIndexTotal = this.numBoxIndexLeaf;
         for (let numLevel = this.maxLevel - 1; numLevel >= 2; numLevel--) {
             currentIndex = -1;
-            for (let i = 0; i < this.particleCount; i++) {
+            for (let i = 0; i < this.nodeCount; i++) {
                 const temp = Math.floor(sortValue[i] / (1 << 3 * (this.maxLevel - numLevel)));
                 //console.log("temp-index",temp-currentIndex)
                 if (temp != currentIndex) {
@@ -176,109 +176,89 @@ export class TreeBuilder {
         }
     }
     /** int[maxLevel]. 
-     * From large box to small box (maxLevel). 
-     * numLevel = level-1 */
+     * From large box to small box (maxLevel).   
+     * 1<<numLevel*3 = boxCount
+     */
     levelOffset: Int32Array;
     /**
-     * first and last particle in each box, by non-empty id
+     * first and last node in each box, by non-empty id
      * int[2][numBoxIndexLeaf]
      */
-    particleOffset: any;
-    /** int[numBoxIndexFull]; link list for box index : Full -> NonEmpty */
-    boxIndexMask: Int32Array;
+    nodeOffset: any;
+    /** int[maxLevel][numBoxIndexFull]; link list for box index : Full -> NonEmpty */
+    boxIndexMaskBuffers: Array<Int32Array>;
     /** int[numBoxIndexTotal];  
-     *  link list for box index : NonEmpty -> Full  
+     *  link list for box index : NonEmpty -> Full 
+     *  Access: levelOffset[numLevel]+i
      *  Size: non-empty FMM boxes @ all levels
      */
     boxIndexFull: Int32Array;
-    /** int[numBoxIndexLeaf] */
-    numInteraction: Int32Array;
-    /** int[numBoxIndexLeaf][maxM2LInteraction] */
-    // interactionList: any;
-    // /** int[numBoxIndexLeaf] */
-    // boxOffsetStart: Int32Array;
-    // /** int[numBoxIndexLeaf] */
-    // boxOffsetEnd: Int32Array;
+
     allocate() {
 
-        this.particleOffset = [0, 0].map(_ => new Array(this.numBoxIndexLeaf));
-        this.boxIndexMask = new Int32Array(this.numBoxIndexFull);
+        this.nodeOffset = [0, 0].map(_ => new Array(this.numBoxIndexLeaf));
+        this.boxIndexMaskBuffers = new Array(this.maxLevel);
         this.boxIndexFull = new Int32Array(this.numBoxIndexTotal);
         this.levelOffset = new Int32Array(this.maxLevel);
-
-        this.numInteraction = new Int32Array(this.numBoxIndexLeaf);
-        //this.interactionList
         // this.boxOffsetStart = new Int32Array(this.numBoxIndexLeaf);
         // this.boxOffsetEnd = new Int32Array(this.numBoxIndexLeaf);
     }
 
 
-    getBoxData(mortonIndex) {
+    /**
+     * Set nodeOffset boxIndexFull boxIndexMask for numLevel=maxLevel-1
+     */
+    initBoxData(mortonIndex) {
+        let boxIndexMask = new Int32Array(this.numBoxIndexFull);
+        boxIndexMask.fill(-1);
         let numBoxIndex = 0;
         let currentIndex = -1;
-        for (let i = 0; i < this.numBoxIndexFull; i++) this.boxIndexMask[i] = -1;
-        for (let i = 0; i < this.particleCount; i++) {
+        for (let i = 0; i < this.nodeCount; i++) {
             if (mortonIndex[i] != currentIndex) {
-                this.boxIndexMask[mortonIndex[i]] = numBoxIndex;
+                boxIndexMask[mortonIndex[i]] = numBoxIndex;
                 this.boxIndexFull[numBoxIndex] = mortonIndex[i];
-                this.particleOffset[0][numBoxIndex] = i;
-                if (numBoxIndex > 0) this.particleOffset[1][numBoxIndex - 1] = i - 1;
+                this.nodeOffset[0][numBoxIndex] = i;
+                if (numBoxIndex > 0) this.nodeOffset[1][numBoxIndex - 1] = i - 1;
                 currentIndex = mortonIndex[i];
                 numBoxIndex++;
             }
         }
-        this.particleOffset[1][numBoxIndex - 1] = this.particleCount - 1;
-        return numBoxIndex;//==numBoxLeaf
+        this.nodeOffset[1][numBoxIndex - 1] = this.nodeCount - 1;
+        this.boxIndexMaskBuffers[this.maxLevel - 1] = boxIndexMask;
+        this.levelOffset[this.maxLevel - 2] = numBoxIndex;// next level
     }
 
-    // Propagate non-empty/full link list to parent boxes
-    // numLevel=max-1, numLevel>= 2
-    getBoxDataOfParent(numLevel: number) {
+    // Set nodeOffset boxIndexFull boxIndexMask for numLevel<maxLevel-1
+    // numLevel: max-2 => 1
+    initBoxDataOfParent(numLevel: number) {
         //console.log(`getBoxDataOfParent ${_numBoxIndex} ${numLevel}`)
         const tree = this;
+        let boxIndexMask = new Int32Array(1 << numLevel * 3);
+        boxIndexMask.fill(-1);
 
         let numBoxIndex = 0;
         let currentIndex = -1;
-
-        for (let i = 0; i < tree.numBoxIndexFull; i++) { tree.boxIndexMask[i] = -1; }
-
-        const end = tree.levelOffset[numLevel - 1];
-        for (let boxIndex = tree.levelOffset[numLevel]; boxIndex < end; boxIndex++) {
+        const end = tree.levelOffset[numLevel];
+        for (let boxIndex = tree.levelOffset[numLevel + 1]; boxIndex < end; boxIndex++) {
             if (currentIndex != Math.floor(tree.boxIndexFull[boxIndex] / 8)) {
                 currentIndex = Math.floor(tree.boxIndexFull[boxIndex] / 8);
-                tree.boxIndexMask[currentIndex] = numBoxIndex;
-                tree.boxIndexFull[numBoxIndex + tree.levelOffset[numLevel - 1]] = currentIndex;
+                boxIndexMask[currentIndex] = numBoxIndex;
+                tree.boxIndexFull[numBoxIndex + tree.levelOffset[numLevel]] = currentIndex;
                 numBoxIndex++;
             }
         }
-        tree.levelOffset[numLevel - 2] = tree.levelOffset[numLevel - 1] + numBoxIndex;
-
-        return numBoxIndex;
+        tree.levelOffset[numLevel - 1] = tree.levelOffset[numLevel] + numBoxIndex; // next level
+        this.boxIndexMaskBuffers[numLevel] = boxIndexMask;
     }
-
-
-    // Recalculate non-empty box index for current level
-    getBoxIndexMask(numBoxIndex: number, numLevel: number) {
-        //console.log(`get Mask ${numLevel}`);
-        const tree = this;
-        for (let i = 0; i < tree.numBoxIndexFull; i++)
-            tree.boxIndexMask[i] = -1;
-        for (let i = 0; i < numBoxIndex; i++) {
-            let boxIndex = i + tree.levelOffset[numLevel - 1];
-            tree.boxIndexMask[tree.boxIndexFull[boxIndex]] = i;
-        }
-    }
-
-    constructor(particleBuffer: Float32Array, edgeBuffer: Uint32Array, colorBuffer: Float32Array) {
-        this.nodeBuffer = particleBuffer;
-        this.particleCount = particleBuffer.length / 4;
-        this.linkBuffer = edgeBuffer;
+    constructor(nodeBuffer: Float32Array, linkBuffer: Uint32Array, colorBuffer: Float32Array) {
+        this.nodeBuffer = nodeBuffer;
+        this.nodeCount = nodeBuffer.length / 4;
+        this.linkBuffer = linkBuffer;
         this.colorBuffer = colorBuffer;
-        // if (colorBuffer.length / 3 != this.particleCount) { throw "Color buffer length not match: " + this.colorBuffer.length }
 
         this.setBoxSize();
         this.setOptimumLevel();
-        this.sortParticles();
+        this.sortNodes();
 
         const mortonIndex = this.morton();
         const { sortValue, sortIndex } = this.sort(mortonIndex);
@@ -287,19 +267,14 @@ export class TreeBuilder {
         this.allocate();
 
         this.levelOffset[this.maxLevel - 1] = 0;
-        //     kernel.precalc();
-        let numBoxIndex = this.getBoxData(mortonIndex);
+        this.initBoxData(mortonIndex);
 
-        //console.log(this.particleOffset)
-        this.levelOffset[this.maxLevel - 2] = numBoxIndex;
-
-        for (let level = this.maxLevel - 1; level >= 2; level--) {
-            this.getBoxDataOfParent(level);
+        for (let numLevel = this.maxLevel - 2; numLevel >= 1; numLevel--) {
+            this.initBoxDataOfParent(numLevel);
         }
 
-
         console.log(`-- Tree info --
-particleCount                 : ${this.particleCount}
+nodeCount                     : ${this.nodeCount}
 maxLevel                      : ${this.maxLevel} 
 BoxIndexFull=1<<3*maxLevel    : ${this.numBoxIndexFull}
 BoxIndexLeaf={non-empty@max}  : ${this.numBoxIndexLeaf}
@@ -325,8 +300,8 @@ ${Array.from(this.levelOffset)
         for (let i = 0; i < this.numBoxIndexLeaf; i++) {
             if (box_ids.includes(i)) {
                 if (inbox_indexs != null && inbox_indexs.length > 0) {
-                    for (let j = this.particleOffset[0][i]; j <= this.particleOffset[1][i]; j++) {
-                        if (inbox_indexs.includes(j - this.particleOffset[0][i])) {
+                    for (let j = this.nodeOffset[0][i]; j <= this.nodeOffset[1][i]; j++) {
+                        if (inbox_indexs.includes(j - this.nodeOffset[0][i])) {
                             this.nodeBuffer[j * 4 + 3] = 1;
                             this.debug_watch.push({ index: j, box: i, value: this.getNode(j) });
                         } else {
@@ -334,14 +309,14 @@ ${Array.from(this.levelOffset)
                         }
                     }
                 } else {
-                    for (let j = this.particleOffset[0][i]; j <= this.particleOffset[1][i]; j++) {
+                    for (let j = this.nodeOffset[0][i]; j <= this.nodeOffset[1][i]; j++) {
                         this.nodeBuffer[j * 4 + 3] = 1;
                     }
                 }
 
                 continue;
             }
-            for (let j = this.particleOffset[0][i]; j <= this.particleOffset[1][i]; j++) {
+            for (let j = this.nodeOffset[0][i]; j <= this.nodeOffset[1][i]; j++) {
                 this.nodeBuffer[j * 4 + 3] = 0;
             }
         }
