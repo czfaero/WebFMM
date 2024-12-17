@@ -1,7 +1,6 @@
 import { CalcALP_R } from "./AssociatedLegendrePolyn";
-import { FMMSolver } from "./FMMSolver";
-import { TreeBuilder } from "./TreeBuilder";
-import { cart2sph, GetIndex3D } from "./utils";
+import { FMMSolver } from "../FMMSolver";
+import { cart2sph, GetIndex3D } from "../utils";
 
 export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id) {
 

@@ -1,10 +1,12 @@
-import { FMMSolver } from "./FMMSolver";
+import { FMMSolver } from "../FMMSolver";
+import { IFMMKernel } from "../FMMKernel";
 
-export interface IKernel {
+
+export class KernelTs implements IFMMKernel{
     core: FMMSolver;
     debug: boolean;
     accelBuffer: Float32Array;
-    Init: (particleBuffer: Float32Array) => Promise<void>;
+    Init: () => Promise<void>;
     p2p: (numInteraction,interactionList) => Promise<void>;
     p2m: () => Promise<void>;
     m2m: (numLevel: number) => Promise<void>;

@@ -1,4 +1,3 @@
-import { vec3 } from "gl-matrix";
 import { CalcALP } from "./AssociatedLegendrePolyn";
 import { FMMSolver } from "../FMMSolver";
 import { cart2sph, GetIndex3D, GetIndexFrom3D } from "../utils";

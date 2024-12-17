@@ -1,17 +1,18 @@
 import wgsl from './shaders/FMM.wgsl';
 
-import { IKernel } from './kernel';
+import { IFMMKernel } from './FMMKernel';
 import { KernelWgpu } from './kernel_wgpu/kernel_wgpu';
 //import { KernelTs } from './kernels/kernel_ts';
 import { TreeBuilder } from './TreeBuilder';
 
 import { cart2sph, GetIndex3D, GetIndexFrom3D } from "./utils";
 
-import { debug_p2m } from './debug_p2m';
-import { debug_m2l, debug_m2l_p4 } from './debug_m2l';
+
 import { Debug_Id_Pair } from './Force';
+import { debug_p2m } from './kernel_ts/debug_p2m';
+import { debug_m2l, debug_m2l_p4 } from './kernel_ts/debug_m2l';
 import { debug_l2p } from './kernel_ts/debug_l2p';
-import { debug_m2p } from './debug_m2p';
+import { debug_m2p } from './kernel_ts/debug_m2p';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -183,7 +184,7 @@ export class FMMSolver {
 
 
     }
-    kernel: IKernel;
+    kernel: IFMMKernel;
     async main() {
         // this.setBoxSize();
         // this.setOptimumLevel();
@@ -201,7 +202,7 @@ export class FMMSolver {
 
 
 
-        await this.kernel.Init(tree.nodeBuffer);
+        await this.kernel.Init();
 
         // debug
         if (this.debug_watch_box_id_pairs) {

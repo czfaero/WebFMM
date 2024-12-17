@@ -7,7 +7,7 @@ import wgsl_l2p from '../shaders/FMM_l2p.wgsl';
 import wgsl_buffer_sum from '../shaders/buffer_sum.wgsl';
 
 import { cart2sph, GetIndex3D, GetIndexFrom3D } from "../utils";
-import { IKernel } from '../kernel';
+import { IFMMKernel } from '../FMMKernel';
 import { FMMSolver } from '../FMMSolver';
 
 
@@ -57,7 +57,7 @@ class Complex {
 
 
 
-export class KernelWgpu implements IKernel {
+export class KernelWgpu implements IFMMKernel {
   core: FMMSolver;
   debug: boolean;
   particleCount: number;
@@ -91,9 +91,10 @@ export class KernelWgpu implements IKernel {
   debug_info: any;
 
   shaders: any;
-  async Init(nodeBuffer: Float32Array) {
+  async Init() {
     const core = this.core;
-    this.particleCount = nodeBuffer.length / 4;
+    const tree = core.tree;
+    this.particleCount = tree.nodeBuffer.length / 4;
     this.accelBuffer = new Float32Array(this.particleCount * 3);
     this.adapter = await navigator.gpu.requestAdapter();
     this.device = await this.adapter.requestDevice();
@@ -104,7 +105,7 @@ export class KernelWgpu implements IKernel {
     // this.cmdBufferLength = this.maxThreadCount * this.maxWorkgroupCount * 2;// to-do: set a good value
     // this.cmdBufferSize = this.cmdBufferLength * SIZEOF_32;
     this.particleBufferGPU = this.device.createBuffer({
-      size: nodeBuffer.byteLength,
+      size: tree.nodeBuffer.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
     this.uniformBufferSize = 16 * SIZEOF_32;// see shader
@@ -151,7 +152,7 @@ export class KernelWgpu implements IKernel {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
 
-    this.device.queue.writeBuffer(this.particleBufferGPU, 0, nodeBuffer);
+    this.device.queue.writeBuffer(this.particleBufferGPU, 0, tree.nodeBuffer);
 
     this.shaders = {
       p2p: wgsl_p2p,
