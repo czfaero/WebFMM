@@ -1,7 +1,6 @@
 import { CalcALP } from "./AssociatedLegendrePolyn";
-import { FMMSolver } from "./FMMSolver";
-import { TreeBuilder } from "./TreeBuilder";
-import { cart2sph, GetIndex3D } from "./utils";
+import { FMMSolver } from "../FMMSolver";
+import { cart2sph, GetIndex3D } from "../utils";
 const PI = 3.14159265358979323846;
 const inv4PI = 0.25 / PI;
 const eps = 1e-6;

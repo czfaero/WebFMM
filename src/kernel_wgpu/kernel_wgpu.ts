@@ -7,7 +7,7 @@ import wgsl_l2p from '../shaders/FMM_l2p.wgsl';
 import wgsl_buffer_sum from '../shaders/buffer_sum.wgsl';
 
 import { cart2sph, GetIndex3D, GetIndexFrom3D } from "../utils";
-import { IKernel } from './kernel';
+import { IKernel } from '../kernel';
 import { FMMSolver } from '../FMMSolver';
 
 

@@ -1,4 +1,4 @@
-import { FMMSolver } from "../FMMSolver";
+import { FMMSolver } from "./FMMSolver";
 
 export interface IKernel {
     core: FMMSolver;

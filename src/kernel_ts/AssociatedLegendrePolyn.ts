@@ -1,5 +1,5 @@
 // 
-import { cart2sph } from "./utils";
+import { cart2sph } from "../utils";
 
 /**
  * Calc Associated Legendre polynomials for given x=cos(theta) and p.  
