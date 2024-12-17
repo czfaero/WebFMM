@@ -13,7 +13,7 @@ export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id) {
     const tree = core.tree;
     const boxSize = core.tree.rootBoxSize / (1 << tree.maxLevel);
     const buffers = {
-        particleOffset: tree.particleOffset,
+        particleOffset: tree.nodeOffset,
         particleBuffer: tree.nodeBuffer,
         factorial: factorial,
         uniforms: {

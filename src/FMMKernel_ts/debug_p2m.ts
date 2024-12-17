@@ -14,7 +14,7 @@ export function debug_p2m(core: FMMSolver, box_id) {
     }
 
     const boxSize = core.tree.rootBoxSize / (1 << core.tree.maxLevel);
-    const particleOffset = core.tree.particleOffset;
+    const particleOffset = core.tree.nodeOffset;
     let maxParticlePerBox = 0;
     const numBoxIndex = Math.pow(1 << core.tree.maxLevel, 3);
     for (let jj = 0; jj < numBoxIndex; jj++) {
@@ -32,7 +32,7 @@ export function debug_p2m(core: FMMSolver, box_id) {
         {
             factorial: factorial,
             uniforms: uniforms,
-            particleOffset: tree.particleOffset,
+            particleOffset: tree.nodeOffset,
             particleBuffer: tree.nodeBuffer
 
         }

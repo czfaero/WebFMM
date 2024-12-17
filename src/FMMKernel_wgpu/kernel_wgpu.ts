@@ -474,7 +474,7 @@ export class KernelWgpu implements IFMMKernel {
       this.debug_info["events"].push({ time: performance.now(), tag: "start" });
     }
     const numBoxIndex = this.core.tree.numBoxIndexLeaf;
-    const particleOffset = this.core.tree.particleOffset;
+    const particleOffset = this.core.tree.nodeOffset;
 
     const particleOffsetBuffer = new Uint32Array(numBoxIndex * 2);
     for (let i = 0; i < numBoxIndex; i++) {
@@ -605,7 +605,7 @@ export class KernelWgpu implements IFMMKernel {
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, numBoxIndex);
 
     const boxSize = core.tree.rootBoxSize / (1 << core.tree.maxLevel);
-    const particleOffset = core.tree.particleOffset;
+    const particleOffset = core.tree.nodeOffset;
     let maxParticlePerBox = 0;
     for (let jj = 0; jj < numBoxIndex; jj++) {
       let c = particleOffset[1][jj] - particleOffset[0][jj] + 1;
@@ -747,8 +747,8 @@ export class KernelWgpu implements IFMMKernel {
         iy = indexi.y,
         iz = indexi.z;
 
-      command[ii * commandLength] = core.tree.numInteraction[ii];
-      for (let ij = 0; ij < core.tree.numInteraction[ii]; ij++) {
+      command[ii * commandLength] = core.interactionCounts[ii];
+      for (let ij = 0; ij < core.interactionCounts[ii]; ij++) {
         let jj = core.interactionList[ii][ij];
         let jbd = jj + core.tree.levelOffset[numLevel - 1];
         let indexj = GetIndex3D(core.tree.boxIndexFull[jbd]);
@@ -893,12 +893,12 @@ export class KernelWgpu implements IFMMKernel {
     // loop foreach box set group
     let groupCount = 0;
     for (let ii = 0; ii < numBoxIndex; ii++) {
-      let nParticle = core.tree.particleOffset[1][ii] - core.tree.particleOffset[0][ii];
+      let nParticle = core.tree.nodeOffset[1][ii] - core.tree.nodeOffset[0][ii];
       let nGroup = (nParticle + threadsPerGroup) / threadsPerGroup;
       nGroup = Math.floor(nGroup);
       for (let n = 0; n < nGroup; n++) {
         command[groupCount * commandLength + 0] = ii;
-        command[groupCount * commandLength + 1] = core.tree.particleOffset[0][ii] + n * threadsPerGroup;
+        command[groupCount * commandLength + 1] = core.tree.nodeOffset[0][ii] + n * threadsPerGroup;
         command[groupCount * commandLength + 2] = (n == nGroup - 1) ? threadsPerGroup : (nParticle - (nGroup - 1) * threadsPerGroup);
         command[groupCount * commandLength + 2] = core.tree.boxIndexFull[ii];
         groupCount++;

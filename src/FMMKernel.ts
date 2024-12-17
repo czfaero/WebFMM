@@ -11,8 +11,6 @@ export interface IFMMKernel {
     m2l: (numBoxIndex: number, numLevel: number) => Promise<void>;
     l2l: (numBoxIndex: number, numLevel: number) => Promise<void>;
     l2p: (numBoxIndex: number) => Promise<void>;
-    Mnm: Array<Float32Array>;
-    Lnm: Array<Float32Array>;
     dataReady: boolean;
     Release: () => void;
 }
