@@ -210,7 +210,7 @@ export class FMMSolver {
                 const p2m_result = debug_p2m(this, pair.src);
 
                 const m2l_result = (() => {
-                    const numLevel = 2;
+                    const numLevel = tree.maxLevel;
                     return debug_m2l_p4(this, numLevel, p2m_result, pair.src, pair.dst);
 
                     return debug_m2l(this, numLevel, p2m_result, pair.src, pair.dst);
@@ -226,7 +226,7 @@ export class FMMSolver {
                     const dst_count = tree.particleOffset[1][pair.dst] - dst_start + 1;
                     const src_start = tree.particleOffset[0][pair.src];
                     const src_count = tree.particleOffset[1][pair.src] - src_start + 1;
-                    
+
                     direct_result = new Float32Array(dst_count * 3);
                     function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
                     function inverseSqrt(x) { return 1 / Math.sqrt(x); }
