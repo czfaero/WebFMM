@@ -13,6 +13,7 @@ import { debug_p2m } from './FMMKernel_ts/debug_p2m';
 import { debug_m2l_p4 } from './FMMKernel_ts/debug_m2l';
 import { debug_l2p } from './FMMKernel_ts/debug_l2p';
 import { debug_m2p } from './FMMKernel_ts/debug_m2p';
+import { FMMKernel_ts } from './FMMKernel_ts/kernel_ts';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -33,174 +34,114 @@ export class FMMSolver {
 
 
     interactionList: any;
+    /** int[numBoxIndexLeaf]; reused for InteractionList */
+    interactionCounts: Int32Array;
 
-
-
-
-
-
-    getInteractionListP2P(numBoxIndex: number, numLevel: number) {
+    getBoxRange(offset: number, count: number) {
         const tree = this.tree;
-        // Initialize the minimum and maximum values
-        let jxmin = 1000000,
-            jxmax = -1000000,
-            jymin = 1000000,
-            jymax = -1000000,
-            jzmin = 1000000,
-            jzmax = -1000000;
-        // Calculate the minimum and maximum of boxIndex3D
-        for (let jj = 0; jj < numBoxIndex; jj++) {
-            let jb = jj + tree.levelOffset[numLevel - 1];
-            let boxIndex3D = GetIndex3D(tree.boxIndexFull[jb]);
-            jxmin = Math.min(jxmin, boxIndex3D.x);
-            jxmax = Math.max(jxmax, boxIndex3D.x);
-            jymin = Math.min(jymin, boxIndex3D.y);
-            jymax = Math.max(jymax, boxIndex3D.y);
-            jzmin = Math.min(jzmin, boxIndex3D.z);
-            jzmax = Math.max(jzmax, boxIndex3D.z);
+        let xmin = 1000000,
+            xmax = -1000000,
+            ymin = 1000000,
+            ymax = -1000000,
+            zmin = 1000000,
+            zmax = -1000000;
+
+        for (let i = 0; i < count; i++) {
+            let box_id = i + offset;
+            let boxIndex3D = GetIndex3D(tree.boxIndexFull[box_id]);
+            xmin = Math.min(xmin, boxIndex3D.x);
+            xmax = Math.max(xmax, boxIndex3D.x);
+            ymin = Math.min(ymin, boxIndex3D.y);
+            ymax = Math.max(ymax, boxIndex3D.y);
+            zmin = Math.min(zmin, boxIndex3D.z);
+            zmax = Math.max(zmax, boxIndex3D.z);
         }
+        return { xmin, xmax, ymin, ymax, zmin, zmax };
+    }
+
+    setInteractionListP2P() {
+        const tree = this.tree;
+
+        const boxCount = tree.levelBoxCounts[tree.maxLevel - 1]; //non-empty
+        const offset = tree.levelOffset[tree.maxLevel - 1]; // should be 0
+        const mask = tree.boxIndexMaskBuffers[tree.maxLevel - 1];
+        let { xmin, xmax, ymin, ymax, zmin, zmax } = this.getBoxRange(offset, boxCount);
 
         //p2p
-        for (let ii = 0; ii < numBoxIndex; ii++) {
-            let ib = ii + tree.levelOffset[numLevel - 1];
-            tree.numInteraction[ii] = 0;
-            let boxIndex3D = GetIndex3D(tree.boxIndexFull[ib]);
+        for (let i = 0; i < boxCount; i++) {
+            this.interactionList[i].fill(0);
+            this.interactionCounts[i] = 0;
+            let box_id = i + offset;
+            let boxIndex3D = GetIndex3D(tree.boxIndexFull[box_id]);
             let ix = boxIndex3D.x;
             let iy = boxIndex3D.y;
             let iz = boxIndex3D.z;
-            for (let jx = Math.max(ix - 1, jxmin); jx <= Math.min(ix + 1, jxmax); jx++) {
-                for (let jy = Math.max(iy - 1, jymin); jy <= Math.min(iy + 1, jymax); jy++) {
-                    for (let jz = Math.max(iz - 1, jzmin); jz <= Math.min(iz + 1, jzmax); jz++) {
+            for (let jx = Math.max(ix - 1, xmin); jx <= Math.min(ix + 1, xmax); jx++) {
+                for (let jy = Math.max(iy - 1, ymin); jy <= Math.min(iy + 1, ymax); jy++) {
+                    for (let jz = Math.max(iz - 1, zmin); jz <= Math.min(iz + 1, zmax); jz++) {
                         boxIndex3D.x = jx;
                         boxIndex3D.y = jy;
                         boxIndex3D.z = jz;
-                        let boxIndex = GetIndexFrom3D(boxIndex3D, numLevel);
-                        let jj = tree.boxIndexMask[boxIndex];
-                        if (jj != -1) {
-                            this.interactionList[ii][tree.numInteraction[ii]] = jj;
-                            tree.numInteraction[ii]++;
+                        let boxIndex = GetIndexFrom3D(boxIndex3D);
+                        let target_box_id = mask[boxIndex];
+                        if (target_box_id != -1) {
+                            this.interactionList[i][this.interactionCounts[i]] = target_box_id;
+                            this.interactionCounts[i]++;
                         }
                     }
                 }
             }
         }
     }
-    getInteractionListM2L(numBoxIndex: number, numLevel: number) {
+    setInteractionListM2L(numLevel: number) {
         const tree = this.tree;
-        // Initialize the minimum and maximum values
-        let jxmin = 1000000,
-            jxmax = -1000000,
-            jymin = 1000000,
-            jymax = -1000000,
-            jzmin = 1000000,
-            jzmax = -1000000;
-        // Calculate the minimum and maximum of boxIndex3D
-        for (let jj = 0; jj < numBoxIndex; jj++) {
-            let jb = jj + tree.levelOffset[numLevel - 1];
-            let boxIndex3D = GetIndex3D(tree.boxIndexFull[jb]);
-            jxmin = Math.min(jxmin, boxIndex3D.x);
-            jxmax = Math.max(jxmax, boxIndex3D.x);
-            jymin = Math.min(jymin, boxIndex3D.y);
-            jymax = Math.max(jymax, boxIndex3D.y);
-            jzmin = Math.min(jzmin, boxIndex3D.z);
-            jzmax = Math.max(jzmax, boxIndex3D.z);
-        }
 
-        for (let ii = 0; ii < numBoxIndex; ii++) {
-            let ib = ii + tree.levelOffset[numLevel - 1];
-            tree.numInteraction[ii] = 0;
-            let boxIndex3D = GetIndex3D(tree.boxIndexFull[ib]);
+        const boxCount = tree.levelBoxCounts[numLevel]; //non-empty
+        const offset = tree.levelOffset[numLevel];
+        const mask = tree.boxIndexMaskBuffers[numLevel];
+        let { xmin, xmax, ymin, ymax, zmin, zmax } = this.getBoxRange(offset, boxCount);
+
+        for (let i = 0; i < boxCount; i++) {
+            this.interactionList[i].fill(0);
+            this.interactionCounts[i] = 0;
+            let box_id = i + offset;
+            let boxIndex3D = GetIndex3D(tree.boxIndexFull[box_id]);
             let ix = boxIndex3D.x,
                 iy = boxIndex3D.y,
                 iz = boxIndex3D.z;
-            for (let jj = 0; jj < numBoxIndex; jj++) {
-                let jb = jj + tree.levelOffset[numLevel - 1];
-                boxIndex3D = GetIndex3D(tree.boxIndexFull[jb]);
-                let jx = boxIndex3D.x,
-                    jy = boxIndex3D.y,
-                    jz = boxIndex3D.z;
-                if (jx < ix - 1 || ix + 1 < jx || jy < iy - 1 || iy + 1 < jy || jz < iz - 1 || iz + 1 < jz) {
-                    this.interactionList[ii][tree.numInteraction[ii]] = jj;
-                    tree.numInteraction[ii]++;
-                }
-            }
-        }
+            let ixp = Math.floor(ix / 2),
+                iyp = Math.floor(iy / 2),
+                izp = Math.floor(iz / 2);// parent box index
 
-    }
-    getInteractionListM2LLower(numBoxIndex: number, numLevel: number) {
-        const tree = this.tree;
-        // Initialize the minimum and maximum values
-        let jxmin = 1000000,
-            jxmax = -1000000,
-            jymin = 1000000,
-            jymax = -1000000,
-            jzmin = 1000000,
-            jzmax = -1000000;
-        // Calculate the minimum and maximum of boxIndex3D
-        for (let jj = 0; jj < numBoxIndex; jj++) {
-            let jb = jj + tree.levelOffset[numLevel - 1];
-            let boxIndex3D = GetIndex3D(tree.boxIndexFull[jb]);
-            jxmin = Math.min(jxmin, boxIndex3D.x);
-            jxmax = Math.max(jxmax, boxIndex3D.x);
-            jymin = Math.min(jymin, boxIndex3D.y);
-            jymax = Math.max(jymax, boxIndex3D.y);
-            jzmin = Math.min(jzmin, boxIndex3D.z);
-            jzmax = Math.max(jzmax, boxIndex3D.z);
-        }
-        for (let ii = 0; ii < numBoxIndex; ii++) {
-            let ib = ii + tree.levelOffset[numLevel - 1];
-            tree.numInteraction[ii] = 0;
-            let boxIndex3D = GetIndex3D(tree.boxIndexFull[ib]);
-            let ix = boxIndex3D.x,
-                iy = boxIndex3D.y,
-                iz = boxIndex3D.z;
-            let ixp = Math.floor((ix + 2) / 2),
-                iyp = Math.floor((iy + 2) / 2),
-                izp = Math.floor((iz + 2) / 2);
-            for (let jxp = ixp - 1; jxp <= ixp + 1; jxp++) {
-                for (let jyp = iyp - 1; jyp <= iyp + 1; jyp++) {
-                    for (let jzp = izp - 1; jzp <= izp + 1; jzp++) {
-                        for (let jx = Math.max(2 * jxp - 2, jxmin); jx <= Math.min(2 * jxp - 1, jxmax); jx++) {
-                            for (let jy = Math.max(2 * jyp - 2, jymin); jy <= Math.min(2 * jyp - 1, jymax); jy++) {
-                                for (let jz = Math.max(2 * jzp - 2, jzmin); jz <= Math.min(2 * jzp - 1, jzmax); jz++) {
-                                    if (jx < ix - 1 || ix + 1 < jx || jy < iy - 1 || iy + 1 < jy || jz < iz - 1 || iz + 1 < jz) {
-                                        boxIndex3D.x = jx;
-                                        boxIndex3D.y = jy;
-                                        boxIndex3D.z = jz;
-                                        let boxIndex = GetIndexFrom3D(boxIndex3D, numLevel);
-                                        let jj = tree.boxIndexMask[boxIndex];
-                                        if (jj != -1) {
-                                            this.interactionList[ii][tree.numInteraction[ii]] = jj;
-                                            tree.numInteraction[ii]++;
-                                        }
-                                    }
-                                }
+            let xstart = Math.max(ixp * 2 - 2, xmin),
+                ystart = Math.max(iyp * 2 - 2, ymin),
+                zstart = Math.max(izp * 2 - 2, zmin);
+            let xend = Math.min(ixp * 2 + 3, xmax),
+                yend = Math.min(iyp * 2 + 3, ymax),
+                zend = Math.min(izp * 2 + 3, zmax);
+            for (let jx = xstart; jx <= xend; jx++)
+                for (let jy = ystart; jy <= yend; jy++)
+                    for (let jz = zstart; jz <= zend; jz++) {
+                        if (jx < ix - 1 || ix + 1 < jx || jy < iy - 1 || iy + 1 < jy || jz < iz - 1 || iz + 1 < jz) {
+                            let target_box_index = GetIndexFrom3D({ x: jx, y: jy, z: jz });
+                            let target_box_id = mask[target_box_index];
+                            
+                            if (target_box_id != -1) {
+                                this.interactionList[i][this.interactionCounts[i]] = target_box_id;
+                                this.interactionCounts[i]++;
                             }
+
                         }
                     }
-                }
-            }
         }
 
-
     }
+
     kernel: IFMMKernel;
     async main() {
-        // this.setBoxSize();
-        // this.setOptimumLevel();
-        // this.sortParticles();
-        // this.countNonEmptyBoxes();
-        // this.allocate();
-        //this.interactionList = new Array(this.numBoxIndexLeaf).fill(0).map(_ => new Int32Array(maxM2LInteraction));
         const tree = this.tree;
 
-        //     kernel.precalc();
-        let numBoxIndex = 0;
-        //   // P2P
-        this.getInteractionListP2P(numBoxIndex, tree.maxLevel);
-        //     bodyAccel.fill(0);
-
-
+        this.setInteractionListP2P();
 
         await this.kernel.Init();
 
@@ -221,10 +162,10 @@ export class FMMSolver {
                 let direct_result;
                 // p2p
                 {
-                    const dst_start = tree.particleOffset[0][pair.dst];
-                    const dst_count = tree.particleOffset[1][pair.dst] - dst_start + 1;
-                    const src_start = tree.particleOffset[0][pair.src];
-                    const src_count = tree.particleOffset[1][pair.src] - src_start + 1;
+                    const dst_start = tree.nodeStartOffset[pair.dst];
+                    const dst_count = tree.nodeEndOffset[pair.dst] - dst_start + 1;
+                    const src_start = tree.nodeStartOffset[pair.src];
+                    const src_count = tree.nodeEndOffset[pair.src] - src_start + 1;
 
                     direct_result = new Float32Array(dst_count * 3);
                     function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
@@ -258,66 +199,43 @@ export class FMMSolver {
                     pair,
                     { step: "p2m", result: p2m_result },
                     { step: "m2l", result: m2l_result },
-                    {
-                        step: "l2p", result: l2p_result
-                    },
-                    { step: "direct", result: direct_result }
-                    , { step: "m2p", result: m2p_result }
+                    { step: "l2p", result: l2p_result },
+                    { step: "direct", result: direct_result },
+                    { step: "m2p", result: m2p_result }
                 ];
 
             });
 
             console.log(this.debug_results)
-            debugger;
+           // debugger;
 
         }
 
         //     kernel.p2p(numBoxIndex);
-        await this.kernel.p2p(tree.numInteraction, this.interactionList);
-
+        await this.kernel.p2p();
         await this.kernel.p2m();
 
-        if (tree.maxLevel > 2) {
-            for (let numLevel = tree.maxLevel - 1; numLevel >= 2; numLevel--) {
-                let numBoxIndexOld = numBoxIndex;
-                //numBoxIndex = tree.getBoxDataOfParent(numBoxIndex, numLevel);
-                // todo
-                await this.kernel.m2m(numLevel);
-            }
-            //numLevel = 2;
-        }
-        else {
-            tree.getBoxIndexMask(numBoxIndex, tree.maxLevel);
-        }
-        console.log(numBoxIndex)
-        this.getInteractionListM2L(numBoxIndex, 2);
-        throw "pause before m2l"
-        // await this.kernel.m2l(numBoxIndex, numLevel);
-        await this.kernel.m2l(numBoxIndex, 2);
-        throw "pause"
 
-        if (tree.maxLevel > 2) {
-
-            for (let numLevel = 3; numLevel <= tree.maxLevel; numLevel++) {
-
-                numBoxIndex = tree.levelOffset[numLevel - 2] - tree.levelOffset[numLevel - 1];
-
-                await this.kernel.l2l(numBoxIndex, numLevel);
-
-                tree.getBoxIndexMask(numBoxIndex, numLevel);
-
-                this.getInteractionListM2LLower(numBoxIndex, numLevel);
-
-                await this.kernel.m2l(numBoxIndex, numLevel);
-            }
-            // numLevel = tree.maxLevel;
+        for (let numLevel = tree.maxLevel - 1; numLevel >= 2; numLevel--) {
+            await this.kernel.m2m(numLevel);
         }
 
-        await this.kernel.l2p(numBoxIndex);
+
+        this.setInteractionListM2L(1);
+        await this.kernel.m2l(1);
+        debugger;
+        for (let numLevel = 2; numLevel < tree.maxLevel; numLevel++) {
+            await this.kernel.l2l(numLevel - 1);
+            this.setInteractionListM2L(numLevel);
+            await this.kernel.m2l(numLevel);
+
+        }
+
+        await this.kernel.l2p();
 
         this.kernel.Release();
-
     }
+
     numExpansions: number;
     numExpansion2: number;
     numExpansion4: number;
@@ -326,10 +244,10 @@ export class FMMSolver {
 
     tree: TreeBuilder;
 
-    constructor(tree: TreeBuilder, kernelName: string = "wgpu") {
+    constructor(tree: TreeBuilder, kernelName: string = "ts") {
         const TKernel = {
             "wgpu": KernelWgpu,
-            // "ts": KernelTs
+            "ts": FMMKernel_ts
         }[kernelName];
         if (!TKernel) throw "Unknown Kernel: " + kernelName;
         console.log("Create with kernel: " + kernelName);
@@ -342,6 +260,9 @@ export class FMMSolver {
         this.numExpansion4 = this.numExpansion2 * this.numExpansion2;
         this.numCoefficients = this.numExpansions * (this.numExpansions + 1) / 2;
         this.DnmSize = (4 * this.numExpansion2 * this.numExpansions - this.numExpansions) / 3;
+
+        this.interactionCounts = new Int32Array(tree.numBoxIndexLeaf);
+        this.interactionList = new Array(tree.numBoxIndexLeaf).fill(0).map(_ => new Int32Array(maxM2LInteraction));
     }
 
     isDataReady() {

@@ -467,19 +467,20 @@ export class KernelWgpu implements IFMMKernel {
   }
   Dnm: Float32Array;
   // Ynm: Float32Array;
-  async p2p(numInteraction, interactionList) {
+  async p2p() {
     if (this.debug) {
       this.debug_p2p_call_count = 0;
       this.debug_info["events"] = [];
       this.debug_info["events"].push({ time: performance.now(), tag: "start" });
     }
+    const tree = this.core.tree;
     const numBoxIndex = this.core.tree.numBoxIndexLeaf;
-    const particleOffset = this.core.tree.nodeOffset;
+
 
     const particleOffsetBuffer = new Uint32Array(numBoxIndex * 2);
     for (let i = 0; i < numBoxIndex; i++) {
-      particleOffsetBuffer[i * 2] = particleOffset[0][i];
-      particleOffsetBuffer[i * 2 + 1] = particleOffset[1][i];
+      particleOffsetBuffer[i * 2] = tree.nodeStartOffset[0][i];
+      particleOffsetBuffer[i * 2 + 1] = tree.nodeEndOffset[1][i];
     }
     this.particleOffsetGPU = this.device.createBuffer({
       size: particleOffsetBuffer.byteLength,
@@ -506,9 +507,9 @@ export class KernelWgpu implements IFMMKernel {
     }
 
     for (let ii = 0; ii < numBoxIndex; ii++) {
-      for (let i = particleOffset[0][ii]; i <= particleOffset[1][ii]; i++) {
-        for (let ij = 0; ij < numInteraction[ii]; ij++) {
-          const jj = interactionList[ii][ij];
+      for (let i = tree.nodeStartOffset[0][ii]; i <= tree.nodeEndOffset[0][ii]; i++) {
+        for (let ij = 0; ij < this.core.interactionCounts[ii]; ij++) {
+          const jj = this.core.interactionList[ii][ij];
           command[commandCount * 2] = i;
           command[commandCount * 2 + 1] = jj;
           commandCount++;
@@ -586,6 +587,7 @@ export class KernelWgpu implements IFMMKernel {
   factorial: Float32Array;
   async p2m() {
     const core = this.core;
+    const tree = core.tree;
 
     let fact = 1.0;
     let factorial = new Float32Array(2 * this.core.numExpansions);
@@ -605,10 +607,10 @@ export class KernelWgpu implements IFMMKernel {
     this.device.queue.writeBuffer(this.commandBufferGPU, 0, command, 0, numBoxIndex);
 
     const boxSize = core.tree.rootBoxSize / (1 << core.tree.maxLevel);
-    const particleOffset = core.tree.nodeOffset;
+
     let maxParticlePerBox = 0;
     for (let jj = 0; jj < numBoxIndex; jj++) {
-      let c = particleOffset[1][jj] - particleOffset[0][jj] + 1;
+      let c = tree.nodeEndOffset[jj] - tree.nodeStartOffset[0][jj] + 1;
       if (c > maxParticlePerBox) { maxParticlePerBox = c; }
     }
 
@@ -663,12 +665,12 @@ export class KernelWgpu implements IFMMKernel {
       let jb = jj + core.tree.levelOffset[numLevel];
       let nfjp = Math.trunc(core.tree.boxIndexFull[jb] / 8);
       let nfjc = core.tree.boxIndexFull[jb] % 8;
-      let ib = core.tree.boxIndexMask[nfjp] + core.tree.levelOffset[numLevel - 1];// MnmIndex
+      let ib = core.tree.boxIndexMaskBuffers[numLevel][nfjp] + core.tree.levelOffset[numLevel - 1];// MnmIndex
       let boxIndex3D = GetIndex3D(nfjc);
       boxIndex3D.x = 4 - boxIndex3D.x * 2;
       boxIndex3D.y = 4 - boxIndex3D.y * 2;
       boxIndex3D.z = 4 - boxIndex3D.z * 2;
-      let je = GetIndexFrom3D(boxIndex3D, 3);
+      let je = GetIndexFrom3D(boxIndex3D);
       command[jj * commandLength + 0] = jb;//Mnm index
       command[jj * commandLength + 1] = je + 1;
       command[jj * commandLength + 2] = core.tree.boxIndexFull[jb];//to-do: check for empty box or more level 
@@ -734,13 +736,14 @@ export class KernelWgpu implements IFMMKernel {
       //throw "pause after m2m";
     }
   }
-  async m2l(numBoxIndex: number, numLevel: number) {
+  async m2l(numLevel: number) {
 
     const core = this.core;
+    const boxCount = core.tree.levelBoxCounts[numLevel];
     const commandLength = 2 * maxM2LInteraction + 1;//count, pairs
-    let command = new Int32Array(commandLength * numBoxIndex);
+    let command = new Int32Array(commandLength * boxCount);
 
-    for (let ii = 0; ii < numBoxIndex; ii++) {
+    for (let ii = 0; ii < boxCount; ii++) {
       let ib = ii + core.tree.levelOffset[numLevel - 1];
       let indexi = GetIndex3D(core.tree.boxIndexFull[ib]);
       let ix = indexi.x,
@@ -754,7 +757,7 @@ export class KernelWgpu implements IFMMKernel {
         let indexj = GetIndex3D(core.tree.boxIndexFull[jbd]);
         let jx = indexj.x, jy = indexj.y, jz = indexj.z;
 
-        let je = GetIndexFrom3D({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 }, 3);
+        let je = GetIndexFrom3D({ x: ix - jx + 3, y: iy - jy + 3, z: iz - jz + 3 });
         let jb = jj + core.tree.levelOffset[numLevel - 1];
         command[ii * commandLength + 1 + ij * 2] = jb;//Mnm index
         command[ii * commandLength + 1 + ij * 2 + 1] = je + 1;
@@ -773,7 +776,7 @@ export class KernelWgpu implements IFMMKernel {
     this.RunCompute("m2l",
       [this.uniformBufferGPU, this.mnmBufferGPU, this.commandBufferGPU
         , this.dnmBufferGPU, this.lnmBufferGPU],
-      numBoxIndex, this.lnmBufferGPU
+      boxCount, this.lnmBufferGPU
     );
     if (this.debug) {
       //console.log("debug m2l")
@@ -801,17 +804,18 @@ export class KernelWgpu implements IFMMKernel {
 
 
   }
-  async l2l(numBoxIndex: number, numLevel: number) {
+  async l2l(numLevel: number) {
     //console.log("l2l")
     const core = this.core;
+    const boxCount = core.tree.levelBoxCounts[numLevel];
     const commandLength = 2;
-    let command = new Int32Array(commandLength * numBoxIndex);
+    let command = new Int32Array(commandLength * boxCount);
 
     let nbc = -1, neo = new Array(core.tree.numBoxIndexFull);
     let numBoxIndexOld = 0;
 
     for (let i = 0; i < core.tree.numBoxIndexFull; i++) { neo[i] = -1; }
-    for (let ii = 0; ii < numBoxIndex; ii++) {
+    for (let ii = 0; ii < boxCount; ii++) {
       let ib = ii + core.tree.levelOffset[numLevel - 1];
       if (nbc != Math.floor(core.tree.boxIndexFull[ib] / 8)) {
         nbc = Math.floor(core.tree.boxIndexFull[ib] / 8);
@@ -822,7 +826,7 @@ export class KernelWgpu implements IFMMKernel {
     //console.log(neo);
 
 
-    numBoxIndexOld = numBoxIndex;
+    numBoxIndexOld = boxCount;
     if (numBoxIndexOld < 8) { numBoxIndexOld = 8; }
     // for (let ii = 0; ii < numBoxIndexOld; ii++) {
     //   for (let i = 0; i < core.numCoefficients; i++) {
@@ -830,7 +834,7 @@ export class KernelWgpu implements IFMMKernel {
     //   }
     // }
 
-    for (let ii = 0; ii < numBoxIndex; ii++) {
+    for (let ii = 0; ii < boxCount; ii++) {
       let ib = ii + core.tree.levelOffset[numLevel - 1];
       let nfip = Math.floor(core.tree.boxIndexFull[ib] / 8);
       let nfic = core.tree.boxIndexFull[ib] % 8;
@@ -838,7 +842,7 @@ export class KernelWgpu implements IFMMKernel {
       boxIndex3D.x = boxIndex3D.x * 2 + 2;
       boxIndex3D.y = boxIndex3D.y * 2 + 2;
       boxIndex3D.z = boxIndex3D.z * 2 + 2;
-      let je = GetIndexFrom3D(boxIndex3D, 3);
+      let je = GetIndexFrom3D(boxIndex3D);
       ib = neo[nfip];//source
       //console.log(`${ib}=>${ii}`)
       command[ii * commandLength] = ib;
@@ -857,7 +861,7 @@ export class KernelWgpu implements IFMMKernel {
     this.RunCompute("l2l",
       [this.uniformBufferGPU, this.lnmBufferGPU, this.commandBufferGPU,
       this.dnmBufferGPU, this.lnmOldBufferGPU],
-      numBoxIndex, this.lnmBufferGPU, [], preFunc
+      boxCount, this.lnmBufferGPU, [], preFunc
     );
 
     if (this.debug) {
@@ -884,21 +888,22 @@ export class KernelWgpu implements IFMMKernel {
     }
 
   }
-  async l2p(numBoxIndex: number) {
+  async l2p() {
     const core = this.core;
     const commandLength = 4;//
-    let command = new Int32Array(commandLength * numBoxIndex);
+    const boxCount = core.tree.levelBoxCounts[core.tree.maxLevel - 1];
+    let command = new Int32Array(commandLength * boxCount);
     let boxSize = core.tree.rootBoxSize / (1 << core.tree.maxLevel);
     const threadsPerGroup = 256;
     // loop foreach box set group
     let groupCount = 0;
-    for (let ii = 0; ii < numBoxIndex; ii++) {
-      let nParticle = core.tree.nodeOffset[1][ii] - core.tree.nodeOffset[0][ii];
+    for (let ii = 0; ii < boxCount; ii++) {
+      let nParticle = core.tree.nodeEndOffset[ii] - core.tree.nodeStartOffset[ii] + 1;
       let nGroup = (nParticle + threadsPerGroup) / threadsPerGroup;
       nGroup = Math.floor(nGroup);
       for (let n = 0; n < nGroup; n++) {
         command[groupCount * commandLength + 0] = ii;
-        command[groupCount * commandLength + 1] = core.tree.nodeOffset[0][ii] + n * threadsPerGroup;
+        command[groupCount * commandLength + 1] = core.tree.nodeStartOffset[ii] + n * threadsPerGroup;
         command[groupCount * commandLength + 2] = (n == nGroup - 1) ? threadsPerGroup : (nParticle - (nGroup - 1) * threadsPerGroup);
         command[groupCount * commandLength + 2] = core.tree.boxIndexFull[ii];
         groupCount++;

@@ -44,20 +44,22 @@ export function GetIndex3D(boxIndex: number): vec3f {
  * @param numLevel 
  * @returns 
  */
-export function GetIndexFrom3D(boxIndex3D, numLevel: number) {
+export function GetIndexFrom3D(boxIndex3D) {
 
+    let x = boxIndex3D.x, y = boxIndex3D.y, z = boxIndex3D.z;
+    // 2<<level
     let boxIndex = 0;
-    for (let i = 0; i < numLevel; i++) {
-        let nx = boxIndex3D.x % 2;
-        boxIndex3D.x >>= 1;
+    for (let i = 0; x>0||y>0||z>0; i++) {
+        let nx = x % 2;
+        x >>= 1;
         boxIndex += nx * (1 << (3 * i + 1));
 
-        let ny = boxIndex3D.y % 2;
-        boxIndex3D.y >>= 1;
+        let ny = y % 2;
+        y >>= 1;
         boxIndex += ny * (1 << (3 * i));
 
-        let nz = boxIndex3D.z % 2;
-        boxIndex3D.z >>= 1;
+        let nz = z % 2;
+        z >>= 1;
         boxIndex += nz * (1 << (3 * i + 2));
     }
     return boxIndex

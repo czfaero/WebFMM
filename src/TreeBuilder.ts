@@ -176,19 +176,32 @@ export class TreeBuilder {
         }
     }
     /** int[maxLevel]. 
-     * From large box to small box (maxLevel).   
-     * 1<<numLevel*3 = boxCount
+     * offset for accessing boxIndexFull  
      */
     levelOffset: Int32Array;
-    /**
-     * first and last node in each box, by non-empty id
-     * int[2][numBoxIndexLeaf]
+    /** int[maxLevel]. 
+     * boxCount for every level;  
+     * 8<<numLevel*3 = boxCount
      */
-    nodeOffset: any;
-    /** int[maxLevel][numBoxIndexFull]; link list for box index : Full -> NonEmpty */
+    levelBoxCounts: Int32Array;
+    /**
+     * first node in each box, by non-empty id
+     * int[numBoxIndexLeaf]
+     */
+    nodeStartOffset: Int32Array;
+    /**
+     * last node in each box, by non-empty id
+     * int[numBoxIndexLeaf]
+     */
+    nodeEndOffset: Int32Array;
+    /** int[maxLevel][numBoxIndexFull];   
+     * link list for box index : Full -> NonEmpty  
+     * Trimmed.
+     */
     boxIndexMaskBuffers: Array<Int32Array>;
     /** int[numBoxIndexTotal];  
-     *  link list for box index : NonEmpty -> Full 
+     *  link list for box index : NonEmpty -> Full;  
+     *  Data from maxLevel-1 to 0  
      *  Access: levelOffset[numLevel]+i
      *  Size: non-empty FMM boxes @ all levels
      */
@@ -196,7 +209,8 @@ export class TreeBuilder {
 
     allocate() {
 
-        this.nodeOffset = [0, 0].map(_ => new Array(this.numBoxIndexLeaf));
+        this.nodeStartOffset = new Int32Array(this.numBoxIndexLeaf);
+        this.nodeEndOffset = new Int32Array(this.numBoxIndexLeaf);
         this.boxIndexMaskBuffers = new Array(this.maxLevel);
         this.boxIndexFull = new Int32Array(this.numBoxIndexTotal);
         this.levelOffset = new Int32Array(this.maxLevel);
@@ -217,13 +231,13 @@ export class TreeBuilder {
             if (mortonIndex[i] != currentIndex) {
                 boxIndexMask[mortonIndex[i]] = numBoxIndex;
                 this.boxIndexFull[numBoxIndex] = mortonIndex[i];
-                this.nodeOffset[0][numBoxIndex] = i;
-                if (numBoxIndex > 0) this.nodeOffset[1][numBoxIndex - 1] = i - 1;
+                this.nodeStartOffset[numBoxIndex] = i;
+                if (numBoxIndex > 0) this.nodeEndOffset[numBoxIndex - 1] = i - 1;
                 currentIndex = mortonIndex[i];
                 numBoxIndex++;
             }
         }
-        this.nodeOffset[1][numBoxIndex - 1] = this.nodeCount - 1;
+        this.nodeEndOffset[numBoxIndex - 1] = this.nodeCount - 1;
         this.boxIndexMaskBuffers[this.maxLevel - 1] = boxIndexMask;
         this.levelOffset[this.maxLevel - 2] = numBoxIndex;// next level
     }
@@ -273,6 +287,11 @@ export class TreeBuilder {
             this.initBoxDataOfParent(numLevel);
         }
 
+        this.levelBoxCounts = this.levelOffset.map((x, i) =>
+            i == 0 ? 0 : this.levelOffset[i - 1] - x
+        );
+
+
         console.log(`-- Tree info --
 nodeCount                     : ${this.nodeCount}
 maxLevel                      : ${this.maxLevel} 
@@ -300,8 +319,8 @@ ${Array.from(this.levelOffset)
         for (let i = 0; i < this.numBoxIndexLeaf; i++) {
             if (box_ids.includes(i)) {
                 if (inbox_indexs != null && inbox_indexs.length > 0) {
-                    for (let j = this.nodeOffset[0][i]; j <= this.nodeOffset[1][i]; j++) {
-                        if (inbox_indexs.includes(j - this.nodeOffset[0][i])) {
+                    for (let j = this.nodeStartOffset[i]; j <= this.nodeEndOffset[i]; j++) {
+                        if (inbox_indexs.includes(j - this.nodeStartOffset[i])) {
                             this.nodeBuffer[j * 4 + 3] = 1;
                             this.debug_watch.push({ index: j, box: i, value: this.getNode(j) });
                         } else {
@@ -309,14 +328,14 @@ ${Array.from(this.levelOffset)
                         }
                     }
                 } else {
-                    for (let j = this.nodeOffset[0][i]; j <= this.nodeOffset[1][i]; j++) {
+                    for (let j = this.nodeStartOffset[i]; j <= this.nodeEndOffset[i]; j++) {
                         this.nodeBuffer[j * 4 + 3] = 1;
                     }
                 }
 
                 continue;
             }
-            for (let j = this.nodeOffset[0][i]; j <= this.nodeOffset[1][i]; j++) {
+            for (let j = this.nodeStartOffset[i]; j <= this.nodeEndOffset[i]; j++) {
                 this.nodeBuffer[j * 4 + 3] = 0;
             }
         }

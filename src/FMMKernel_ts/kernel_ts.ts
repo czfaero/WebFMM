@@ -9,15 +9,25 @@ export class FMMKernel_ts implements IFMMKernel {
     core: FMMSolver;
     debug: boolean;
     accelBuffer: Float32Array;
-    async Init() {}
-    async p2p(numInteraction, interactionList){
+    async Init() { }
+    async p2p() {
 
     }
-    p2m: () => Promise<void>;
-    m2m: (numLevel: number) => Promise<void>;
-    m2l: (numBoxIndex: number, numLevel: number) => Promise<void>;
-    l2l: (numBoxIndex: number, numLevel: number) => Promise<void>;
-    l2p: (numBoxIndex: number) => Promise<void>;
+    async p2m() {
+
+    }
+    async m2m(numLevel: number) {
+
+    }
+    async m2l(numLevel: number) {
+
+    }
+    async l2l(numLevel: number) {
+
+    }
+    async l2p() {
+
+    }
     Mnm: Array<Float32Array>;
     Lnm: Array<Float32Array>;
     dataReady: boolean;
