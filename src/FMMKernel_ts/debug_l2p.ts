@@ -14,7 +14,8 @@ export function debug_l2p(core: FMMSolver, debug_Lnm, box_id) {
     const tree = core.tree;
     const boxSize = core.tree.rootBoxSize / (1 << tree.maxLevel);
     const buffers = {
-        particleOffset: tree.nodeOffset,
+        nodeStartOffset: tree.nodeStartOffset,
+        nodeEndOffset: tree.nodeEndOffset,
         particleBuffer: tree.nodeBuffer,
         factorial: factorial,
         uniforms: {
@@ -73,8 +74,8 @@ function debug_l2p_shader(debug_Lnm, box_id, index, buffers) {
 
 
     console.log(`box ${index}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
-    const start = buffers.particleOffset[0][box_id];
-    const end = buffers.particleOffset[1][box_id];
+    const start = buffers.nodeStartOffset[box_id];
+    const end = buffers.nodeEndOffset[box_id];
 
     const count = end - start + 1;
     const result = new Float32Array(3 * count);

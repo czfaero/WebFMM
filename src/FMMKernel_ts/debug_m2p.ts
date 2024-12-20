@@ -13,7 +13,8 @@ export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id) {
     const tree = core.tree;
     const boxSize = core.tree.rootBoxSize / (1 << tree.maxLevel);
     const buffers = {
-        particleOffset: tree.nodeOffset,
+        nodeStartOffset: tree.nodeStartOffset,
+        nodeEndOffset: tree.nodeEndOffset,
         particleBuffer: tree.nodeBuffer,
         factorial: factorial,
         uniforms: {
@@ -72,8 +73,8 @@ function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers) {
     console.log(`src`)
     console.log(`box ${src_index}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
 
-    const start = buffers.particleOffset[0][dst_box_id];
-    const end = buffers.particleOffset[1][dst_box_id];
+    const start = buffers.nodeStartOffset[dst_box_id];
+    const end = buffers.nodeEndOffset[dst_box_id];
 
     const count = end - start + 1;
     const result = new Float32Array(3 * count);

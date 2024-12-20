@@ -14,11 +14,11 @@ export function debug_p2m(core: FMMSolver, box_id) {
     }
 
     const boxSize = core.tree.rootBoxSize / (1 << core.tree.maxLevel);
-    const particleOffset = core.tree.nodeOffset;
+
     let maxParticlePerBox = 0;
     const numBoxIndex = Math.pow(1 << core.tree.maxLevel, 3);
     for (let jj = 0; jj < numBoxIndex; jj++) {
-        let c = particleOffset[1][jj] - particleOffset[0][jj] + 1;
+        let c = tree.nodeEndOffset[jj] - tree.nodeStartOffset[jj] + 1;
         if (c > maxParticlePerBox) { maxParticlePerBox = c; }
     }
     const uniforms = {
@@ -32,7 +32,8 @@ export function debug_p2m(core: FMMSolver, box_id) {
         {
             factorial: factorial,
             uniforms: uniforms,
-            particleOffset: tree.nodeOffset,
+            nodeStartOffset: tree.nodeStartOffset,
+            nodeEndOffset: tree.nodeEndOffset,
             particleBuffer: tree.nodeBuffer
 
         }
@@ -74,14 +75,10 @@ function debug_p2m_shader(box_id: number, index: number, buffers: any) {
     // const numCoefficients = numExpansions * (numExpansions + 1) / 2;
     const resultBuffer = new Float32Array(numExpansions2 * 2);
     const boxSize = uniforms.boxSize;
-    const particleOffset = buffers.particleOffset;
     const factorial = buffers.factorial;
 
-
-    // let start = particleOffset[box * 2];
-    // let end = particleOffset[box * 2 + 1];
-    let start = particleOffset[0][box_id];
-    let end = particleOffset[1][box_id];
+    let start = buffers.nodeStartOffset[box_id];
+    let end = buffers.nodeEndOffset[box_id];
 
     const particleBuffer: Float32Array = buffers.particleBuffer;
     function getParticle(i) {
