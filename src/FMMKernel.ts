@@ -13,4 +13,5 @@ export interface IFMMKernel {
     l2p: () => Promise<void>;
     dataReady: boolean;
     Release: () => void;
+    // constructor(core: FMMSolver) {this.core = core;} // how to define this?
 }
