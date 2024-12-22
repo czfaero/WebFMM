@@ -2,16 +2,29 @@ import { CalcALP } from "./AssociatedLegendrePolyn";
 import { FMMSolver } from "../FMMSolver";
 import { cart2sph, GetIndex3D } from "../utils";
 const PI = 3.14159265358979323846;
-const inv4PI = 0.25 / PI;
-const eps = 1e-6;
 export function debug_p2m(core: FMMSolver, box_id) {
     const tree = core.tree;
+    const numExpansions = core.numExpansions
     let fact = 1.0;
-    let factorial = new Float32Array(2 * core.numExpansions);
+    let factorial = new Float32Array(2 * numExpansions);
     for (let m = 0; m < factorial.length; m++) {
         factorial[m] = fact;
         fact = fact * (m + 1);
     }
+
+    let numM = numExpansions * (numExpansions + 1) / 2;
+
+    let ng = new Int32Array(numM);
+    let mg = new Int32Array(numM);
+    for (let n = 0; n < numExpansions; n++) {
+        for (let m = 0; m <= n; m++) {
+            let nms = n * (n + 1) / 2 + m;
+            ng[nms] = n;
+            mg[nms] = m;
+        }
+    }
+
+
 
     const boxSize = core.tree.rootBoxSize / (1 << core.tree.maxLevel);
 
@@ -34,7 +47,9 @@ export function debug_p2m(core: FMMSolver, box_id) {
             uniforms: uniforms,
             nodeStartOffset: tree.nodeStartOffset,
             nodeEndOffset: tree.nodeEndOffset,
-            particleBuffer: tree.nodeBuffer
+            particleBuffer: tree.nodeBuffer,
+            ng: ng,
+            mg: mg
 
         }
     );
@@ -91,19 +106,9 @@ function debug_p2m_shader(box_id: number, index: number, buffers: any) {
     console.log(`box ${index}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
     console.log("node count:", end - start + 1)
 
-
+    let ng = buffers.ng, mg = buffers.mg;
     let numM = numExpansions * (numExpansions + 1) / 2;
     const threadsPerGroup = numM;
-    let ng = new Int32Array(threadsPerGroup);
-    let mg = new Int32Array(threadsPerGroup);
-    for (let n = 0; n < numExpansions; n++) {
-        for (let m = 0; m <= n; m++) {
-            let nms = n * (n + 1) / 2 + m;
-            ng[nms] = n;
-            mg[nms] = m;
-        }
-    }
-
 
     function thread(thread_id: number) {
         if (thread_id >= numM) { return }

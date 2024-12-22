@@ -104,36 +104,46 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
         }
     }
 
+    /** thread for one Lnm */
     function thread(thread_id: number) {
-        let L_real = 0, L_imag = 0;
-        const j = ng[thread_id];
-        const k = mg[thread_id]; // -j<=k<=j
 
-        for (let n = 0; n < numExpansions; n++) {
-            for (let m = -n; m <= n; m++) {
-                let i_Pnm = (j + n) * (j + n + 1) / 2 + abs(m - k);
-                const factorialStuff =
-                    factorialCombineM2L(j + n - abs(m - k), n - m, n + m, j - k, j + k, factorial);
-                const C = Pnm[i_Pnm] * oddeven(n) * oddeven((abs(k - m) - abs(k) - abs(m)) / 2) * sqrt(factorialStuff) / rho_n[j] / rho_n[n] / rho;
+        /** loop for one intercation*/
+        function loop() {
+            let L_real = 0, L_imag = 0;
+            const j = ng[thread_id];
+            const k = mg[thread_id]; // -j<=k<=j
 
-                let i_src = n * n + n + m;
-                const O_real = MnmSource[2 * i_src + 0];
-                const O_imag = MnmSource[2 * i_src + 1];
+            for (let n = 0; n < numExpansions; n++) {
+                for (let m = -n; m <= n; m++) {
+                    let i_Pnm = (j + n) * (j + n + 1) / 2 + abs(m - k);
+                    const factorialStuff =
+                        factorialCombineM2L(j + n - abs(m - k), n - m, n + m, j - k, j + k, factorial);
+                    const C = Pnm[i_Pnm] * oddeven(n) * oddeven((abs(k - m) - abs(k) - abs(m)) / 2) * sqrt(factorialStuff) / rho_n[j] / rho_n[n] / rho;
 
-                const angle = (m - k) * beta;
-                const e_cos = cos(angle);
-                const e_sin = sin(angle);
+                    let i_src = n * n + n + m;
+                    const O_real = MnmSource[2 * i_src + 0];
+                    const O_imag = MnmSource[2 * i_src + 1];
 
-                L_real += C * (O_real * e_cos - O_imag * e_sin);
-                L_imag += C * (O_real * e_sin + O_imag * e_cos);
-                if (isNaN(C)) { debugger; }
+                    const angle = (m - k) * beta;
+                    const e_cos = cos(angle);
+                    const e_sin = sin(angle);
+
+                    L_real += C * (O_real * e_cos - O_imag * e_sin);
+                    L_imag += C * (O_real * e_sin + O_imag * e_cos);
+                    if (isNaN(C)) { debugger; }
+                }
             }
+            debug_Lnm[thread_id * 2] += L_real;
+            debug_Lnm[thread_id * 2 + 1] += L_imag;
         }
-        debug_Lnm[thread_id * 2] += L_real;
-        debug_Lnm[thread_id * 2 + 1] += L_imag;
-        // end of thread
+        let interaction_count = 1;
+        for (let i = 0; i < interaction_count; i++) {
+            loop();
+        }
+
     }
-    for (let t = 0; t < numExpansion2; t++) {
+
+    for (let t = 0; t < core.MnmSize; t++) {
         thread(t);
     }
     console.log("-- debug m2l end--");
