@@ -104,15 +104,13 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
         }
     }
 
-    /** thread for one Lnm */
+    /** thread for one Lnm (Ljk in formula) */
     function thread(thread_id: number) {
-
+        const j = ng[thread_id];
+        const k = mg[thread_id]; // -j<=k<=j
         /** loop for one intercation*/
         function loop() {
             let L_real = 0, L_imag = 0;
-            const j = ng[thread_id];
-            const k = mg[thread_id]; // -j<=k<=j
-
             for (let n = 0; n < numExpansions; n++) {
                 for (let m = -n; m <= n; m++) {
                     let i_Pnm = (j + n) * (j + n + 1) / 2 + abs(m - k);
