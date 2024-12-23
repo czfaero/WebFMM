@@ -3,7 +3,7 @@ import { FMMSolver } from "../FMMSolver";
 import { cart2sph, GetIndex3D, GetIndexFrom3D } from "../utils";
 
 /**
- * tV! * tV! / (bV1! * ... * bV4!)  
+ * calc tV! * tV! / (bV1! * ... * bV4!)  
  * bV1 > bV2, bV3 > bV4, all < readyValues.length
  * @param readyValues factorial buffer[i]= i! 
  * @returns 
@@ -21,8 +21,6 @@ export function factorialCombineM2L(tV: number, bV1, bV2, bV3, bV4, readyValues:
         part2 *= v;
     }
     return part1 * part2;
-
-
 }
 
 
@@ -116,7 +114,8 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
                     let i_Pnm = (j + n) * (j + n + 1) / 2 + abs(m - k);
                     const factorialStuff =
                         factorialCombineM2L(j + n - abs(m - k), n - m, n + m, j - k, j + k, factorial);
-                    const C = Pnm[i_Pnm] * oddeven(n) * oddeven((abs(k - m) - abs(k) - abs(m)) / 2) * sqrt(factorialStuff) / rho_n[j] / rho_n[n] / rho;
+                    const imag_i = oddeven((abs(k - m) - abs(k) - abs(m)) / 2);
+                    const C = Pnm[i_Pnm] * oddeven(n) * imag_i * sqrt(factorialStuff) / rho_n[j] / rho_n[n] / rho;
 
                     let i_src = n * n + n + m;
                     const O_real = MnmSource[2 * i_src + 0];
