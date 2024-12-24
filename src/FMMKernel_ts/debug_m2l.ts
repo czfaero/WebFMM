@@ -70,7 +70,7 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
     }
 
     console.log("-- debug m2l --");
-    const boxSize = core.tree.rootBoxSize / (1 << numLevel);
+    const boxSize = core.tree.rootBoxSize / (2 << numLevel);
 
     const src_index3D = GetIndex3D(tree.boxIndexFull[src_box_id]);
     const dst_index3D = GetIndex3D(tree.boxIndexFull[dst_box_id]);

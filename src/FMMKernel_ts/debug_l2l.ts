@@ -62,7 +62,7 @@ export function debug_l2l_p4(core: FMMSolver, numLevel, debug_src_Lnm, src_box_i
     }
 
     console.log("-- debug l2l --");
-    const src_boxSize = core.tree.rootBoxSize / (1 << numLevel);//large one
+    const src_boxSize = core.tree.rootBoxSize / (2 << numLevel);//large one
     const uniforms = {
         boxSize: src_boxSize,
         boxMinX: tree.boxMinX,

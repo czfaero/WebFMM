@@ -180,8 +180,8 @@ export class TreeBuilder {
      */
     levelOffset: Int32Array;
     /** int[maxLevel]. 
-     * boxCount for every level;  
-     * 8<<numLevel*3 = boxCount
+     * nonEmpty boxCount for every level;  
+     * 8<<numLevel*3 = max boxCount
      */
     levelBoxCounts: Int32Array;
     /**
@@ -200,9 +200,9 @@ export class TreeBuilder {
      */
     boxIndexMaskBuffers: Array<Int32Array>;
     /** int[numBoxIndexTotal];  
-     *  link list for box index : NonEmpty -> Full;  
+     *  link list for box index : id (Non-empty index) -> index (Full morton index);  
      *  Data from maxLevel-1 to 0  
-     *  Access: levelOffset[numLevel]+i
+     *  Access: levelOffset[numLevel]+id  
      *  Size: non-empty FMM boxes @ all levels
      */
     boxIndexFull: Int32Array;
