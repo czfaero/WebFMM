@@ -8,10 +8,10 @@ import { cart2sph, GetIndex3D } from "../utils";
  * @param debug_Mnm 
  * @param src_box_id 
  * @param dst_box_id 
- * @param src_level for debug m2m result, can be absent
+ * @param debug_src_level for debug m2m result, can be absent
  * @returns 
  */
-export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id, src_level = null) {
+export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id, debug_src_level = null) {
 
     let fact = 1.0;
     let factorial = new Float64Array(2 * core.numExpansions);
@@ -20,7 +20,7 @@ export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id, sr
         fact = fact * (m + 1);
     }
     const tree = core.tree;
-    const numLevel = src_level ? src_level : tree.maxLevel - 1;
+    const numLevel = debug_src_level ? debug_src_level : tree.maxLevel - 1;
     const boxSize = core.tree.rootBoxSize / (2 << numLevel);
     const offset = tree.levelOffset[numLevel];// normal(max level):0
     const src_index = core.tree.boxIndexFull[src_box_id + offset];
@@ -44,7 +44,7 @@ export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id, sr
 }
 
 
-function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, numLevel) {
+function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, debug_numLevel) {
     const PI = Math.PI;
     const inv4PI = 0.25 / PI;
     const eps = 1e-6;
@@ -82,7 +82,7 @@ function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, numLevel) {
     let boxCenter = vec3_add([vec3_scale(index3D, boxSize), vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
 
     console.log("-- debug m2p --");
-    console.log(`src box ${src_index}@level${numLevel}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
+    console.log(`src box${src_index}@lv${debug_numLevel}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
 
     const start = buffers.nodeStartOffset[dst_box_id];
     const end = buffers.nodeEndOffset[dst_box_id];

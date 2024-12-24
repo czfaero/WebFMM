@@ -156,13 +156,11 @@ export class FMMSolver {
                 if (route[1] == "p2p") {
                     return "p2p";
                 }
-
                 const p2m_result = debug_p2m(this, pair.src);
 
                 const results = [];
                 results.push(route);
                 results.push({ step: "p2m", result: p2m_result });
-
                 let lastResult = p2m_result;
                 for (let i = 0; i < route.length; i++) {
                     const src = route[i - 1], dst = route[i + 1];
@@ -186,6 +184,10 @@ export class FMMSolver {
                                 })();
                                 results.push({ step: "m2l", result: m2l_result });
                                 lastResult = m2l_result;
+                                if (i + 2 < route.length) {
+                                    const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, pair.dst);
+                                    results.push({ step: "m2l-l2p", result: l2p_result });
+                                }
                             }
                             break;
                         case "l2l": {
@@ -195,6 +197,10 @@ export class FMMSolver {
                             })();
                             results.push({ step: "l2l", result: l2l_result });
                             lastResult = l2l_result;
+                            if (i + 2 < route.length) {
+                                const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, pair.dst);
+                                results.push({ step: "l2l-l2p", result: l2p_result });
+                            }
                         } break;
                     }
                 }

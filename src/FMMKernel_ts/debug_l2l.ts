@@ -123,7 +123,7 @@ export function debug_l2l_p4(core: FMMSolver, numLevel, debug_src_Lnm, src_box_i
         function loop() {
             let L_real = 0, L_imag = 0;
 
-            for (let n = j; n <= numExpansions; n++) {
+            for (let n = j; n < numExpansions; n++) {
                 for (let m = -n; m <= n; m++) {
 
                     let i_src = n * n + n + m;

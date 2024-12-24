@@ -3,7 +3,16 @@ import { FMMSolver } from "../FMMSolver";
 import { TreeBuilder } from "../TreeBuilder";
 import { cart2sph, GetIndex3D } from "../utils";
 
-export function debug_l2p(core: FMMSolver, debug_Lnm, box_id) {
+/**
+ * 
+ * @param core 
+ * @param debug_Lnm 
+ * @param box_id 
+ * @param debug_numlevel for debug internal local expansion result, can be absent
+ * @param debug_dst_box_id for debug, the box contains dst nodes
+ * @returns 
+ */
+export function debug_l2p(core: FMMSolver, debug_Lnm, box_id, debug_numlevel = null, debug_dst_box_id = null) {
 
     let fact = 1.0;
     let factorial = new Float64Array(2 * core.numExpansions);
@@ -12,7 +21,8 @@ export function debug_l2p(core: FMMSolver, debug_Lnm, box_id) {
         fact = fact * (m + 1);
     }
     const tree = core.tree;
-    const boxSize = core.tree.rootBoxSize / (1 << tree.maxLevel);
+    const numLevel = debug_numlevel ? debug_numlevel : tree.maxLevel - 1;
+    const boxSize = core.tree.rootBoxSize / (2 << numLevel);
     const buffers = {
         nodeStartOffset: tree.nodeStartOffset,
         nodeEndOffset: tree.nodeEndOffset,
@@ -27,11 +37,11 @@ export function debug_l2p(core: FMMSolver, debug_Lnm, box_id) {
 
     };
     const index = core.tree.boxIndexFull[box_id];
-    const r = debug_l2p_shader(debug_Lnm, box_id, index, buffers);
+    const r = debug_l2p_shader(debug_Lnm, box_id, index, buffers, numLevel, debug_dst_box_id);
     return r;
 }
 
-function debug_l2p_shader(debug_Lnm, box_id, index, buffers) {
+function debug_l2p_shader(debug_Lnm, box_id, index, buffers, debug_numLevel, debug_dst_box_id) {
     console.log("-- debug l2p --")
 
     const PI = Math.PI;
@@ -73,9 +83,12 @@ function debug_l2p_shader(debug_Lnm, box_id, index, buffers) {
     let boxCenter = vec3_add([vec3_scale(index3D, boxSize), vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
 
 
-    console.log(`box ${index}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
-    const start = buffers.nodeStartOffset[box_id];
-    const end = buffers.nodeEndOffset[box_id];
+    console.log(`box${index}@${debug_numLevel}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
+
+    const node_box_id = debug_dst_box_id ? debug_dst_box_id : box_id;
+    console.log("nodes from ", node_box_id)
+    const start = buffers.nodeStartOffset[node_box_id];
+    const end = buffers.nodeEndOffset[node_box_id];
 
     const count = end - start + 1;
     const result = new Float32Array(3 * count);
