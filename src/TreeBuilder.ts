@@ -247,7 +247,7 @@ export class TreeBuilder {
     initBoxDataOfParent(numLevel: number) {
         //console.log(`getBoxDataOfParent ${_numBoxIndex} ${numLevel}`)
         const tree = this;
-        let boxIndexMask = new Int32Array(1 << numLevel * 3);
+        let boxIndexMask = new Int32Array(8 << numLevel * 3);
         boxIndexMask.fill(-1);
 
         let numBoxIndex = 0;

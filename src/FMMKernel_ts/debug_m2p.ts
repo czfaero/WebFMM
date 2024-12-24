@@ -2,7 +2,16 @@ import { CalcALP_R } from "./AssociatedLegendrePolyn";
 import { FMMSolver } from "../FMMSolver";
 import { cart2sph, GetIndex3D } from "../utils";
 
-export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id) {
+/**
+ * 
+ * @param core 
+ * @param debug_Mnm 
+ * @param src_box_id 
+ * @param dst_box_id 
+ * @param src_level for debug m2m result, can be absent
+ * @returns 
+ */
+export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id, src_level = null) {
 
     let fact = 1.0;
     let factorial = new Float64Array(2 * core.numExpansions);
@@ -11,7 +20,10 @@ export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id) {
         fact = fact * (m + 1);
     }
     const tree = core.tree;
-    const boxSize = core.tree.rootBoxSize / (1 << tree.maxLevel);
+    const numLevel = src_level ? src_level : tree.maxLevel - 1;
+    const boxSize = core.tree.rootBoxSize / (2 << numLevel);
+    const offset = tree.levelOffset[numLevel];// normal(max level):0
+    const src_index = core.tree.boxIndexFull[src_box_id + offset];
     const buffers = {
         nodeStartOffset: tree.nodeStartOffset,
         nodeEndOffset: tree.nodeEndOffset,
@@ -26,13 +38,13 @@ export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id) {
         }
 
     };
-    const src_index = core.tree.boxIndexFull[src_box_id];
-    const r = debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers);
+
+    const r = debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, numLevel);
     return r;
 }
 
 
-function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers) {
+function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, numLevel) {
     const PI = Math.PI;
     const inv4PI = 0.25 / PI;
     const eps = 1e-6;
@@ -70,8 +82,7 @@ function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers) {
     let boxCenter = vec3_add([vec3_scale(index3D, boxSize), vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
 
     console.log("-- debug m2p --");
-    console.log(`src`)
-    console.log(`box ${src_index}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
+    console.log(`src box ${src_index}@level${numLevel}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
 
     const start = buffers.nodeStartOffset[dst_box_id];
     const end = buffers.nodeEndOffset[dst_box_id];

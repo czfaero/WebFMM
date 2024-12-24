@@ -127,7 +127,10 @@ export function debug_m2m_p4(core: FMMSolver, numLevel, debug_src_Mnm, src_box_i
                 for (let m = -n; m <= n; m++) {
                     let n_ = j - n, m_ = k - m;
                     let i_src = n_ * n_ + n_ + m_;
-                    if (n_ < m_) { debugger; }
+                    if (n_ < abs(m_)) {
+                        //console.log("j-n=", n_, " k-m=", m_, " src Mnm not exist ")
+                        continue;
+                    }
                     const O_real = MnmSource[2 * i_src + 0];
                     const O_imag = MnmSource[2 * i_src + 1];
 

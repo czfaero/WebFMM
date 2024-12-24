@@ -14,6 +14,8 @@ import { debug_m2l_p4 } from './FMMKernel_ts/debug_m2l';
 import { debug_l2p } from './FMMKernel_ts/debug_l2p';
 import { debug_m2p } from './FMMKernel_ts/debug_m2p';
 import { FMMKernel_ts } from './FMMKernel_ts/kernel_ts';
+import { debug_l2l_p4 } from './FMMKernel_ts/debug_l2l';
+import { debug_m2m_p4 } from './FMMKernel_ts/debug_m2m';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -150,6 +152,7 @@ export class FMMSolver {
             this.debug_results = this.debug_watch_box_id_pairs.map(pair => {
 
                 const route = this.debug_getRoute(pair.src, pair.dst);
+                console.log("debug route: ", route)
                 if (route[1] == "p2p") {
                     return "p2p";
                 }
@@ -164,7 +167,17 @@ export class FMMSolver {
                 for (let i = 0; i < route.length; i++) {
                     const src = route[i - 1], dst = route[i + 1];
                     switch (route[i]) {
-                        case "m2m": break;
+                        case "m2m": {
+                            const m2m_result = (() => {
+                                const numLevel = dst.level;
+                                return debug_m2m_p4(this, numLevel, lastResult, src.id, dst.id);
+                            })();
+                            results.push({ step: "m2m", result: m2m_result });
+                            lastResult = m2m_result;
+                            const m2p_result = debug_m2p(this, m2m_result, dst.id, pair.dst, dst.level);
+                            results.push({ step: "m2m-m2p", result: m2p_result });
+
+                        } break;
                         case "m2l":
                             {
                                 const m2l_result = (() => {
@@ -175,7 +188,14 @@ export class FMMSolver {
                                 lastResult = m2l_result;
                             }
                             break;
-                        case "l2l": break;
+                        case "l2l": {
+                            const l2l_result = (() => {
+                                const numLevel = src.level;
+                                return debug_l2l_p4(this, numLevel, lastResult, src.id, dst.id);
+                            })();
+                            results.push({ step: "l2l", result: l2l_result });
+                            lastResult = l2l_result;
+                        } break;
                     }
                 }
 
@@ -277,7 +297,7 @@ export class FMMSolver {
         this.tree = tree;
 
         // constants
-        this.numExpansions = 16;
+        this.numExpansions = 10;
         this.numExpansion2 = this.numExpansions * this.numExpansions;
         this.numExpansion4 = this.numExpansion2 * this.numExpansion2;
         this.numCoefficients = this.numExpansions * (this.numExpansions + 1) / 2;
@@ -339,7 +359,9 @@ export class FMMSolver {
             box1_lastIndex = p1_index;
             box2_lastIndex = p2_index;
         }
-        throw "route not found"
+
+        debugger;
+        throw "route not found";
     }
 
 }
