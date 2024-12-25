@@ -9,6 +9,9 @@ import { cart2sph, GetIndex3D, GetIndexFrom3D } from "../utils";
  */
 export function factorialCombineL2L(tV1, tV2, bV0, bV1, bV2, readyValues: ArrayLike<number>) {
     const readyV = readyValues.length - 1;
+    if (bV0 >= readyValues.length) {
+        debugger;
+    }
     return readyValues[tV1] / readyValues[bV0] / readyValues[bV1]
         * readyValues[tV2] / readyValues[bV0] / readyValues[bV2];
 
@@ -92,8 +95,8 @@ export function debug_l2l_p4(core: FMMSolver, numLevel, debug_src_Lnm, src_box_i
     const rho = sph.x, alpha = sph.y, beta = sph.z;
 
     console.log("boxSize:", src_boxSize)
-    console.log(`src box ${src_box_id}`, src_index3D);
-    console.log(`dst box ${dst_box_id}`, dst_index3D);
+    console.log(`src box ${src_box_id}@lv${numLevel}`, src_index3D);
+    console.log(`dst box ${dst_box_id}@lv${numLevel + 1}`, dst_index3D);
     console.log("dist", dist)
     console.log("sph", { rho: rho, alpha: alpha, beta: beta })
 
@@ -125,12 +128,15 @@ export function debug_l2l_p4(core: FMMSolver, numLevel, debug_src_Lnm, src_box_i
 
             for (let n = j; n < numExpansions; n++) {
                 for (let m = -n; m <= n; m++) {
-
+                    if (n - j < abs(m - k)) {
+                        continue; // Pnm not exist
+                    }
                     let i_src = n * n + n + m;
                     const O_real = LnmSource[2 * i_src + 0];
                     const O_imag = LnmSource[2 * i_src + 1];
 
                     let i_Pnm = (n - j) * (n - j + 1) / 2 + abs(m - k);
+
                     const factorialStuff =
                         factorialCombineL2L(n - m, n + m,
                             n - j + abs(m - k), j - k, j + k, factorial);
