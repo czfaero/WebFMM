@@ -144,21 +144,17 @@ export class FMMSolver {
     async main() {
         const tree = this.tree;
 
-        this.setInteractionListP2P();
-
         await this.kernel.Init();
 
         this.debug_Run();
 
-        //     kernel.p2p(numBoxIndex);
+        this.setInteractionListP2P();
         await this.kernel.p2p();
         await this.kernel.p2m();
-
 
         for (let numLevel = tree.maxLevel - 1; numLevel >= 2; numLevel--) {
             await this.kernel.m2m(numLevel);
         }
-
 
         this.setInteractionListM2L(1);
         await this.kernel.m2l(1);
@@ -167,7 +163,6 @@ export class FMMSolver {
             await this.kernel.l2l(numLevel - 1);
             this.setInteractionListM2L(numLevel);
             await this.kernel.m2l(numLevel);
-
         }
 
         await this.kernel.l2p();
@@ -334,7 +329,7 @@ export class FMMSolver {
 
             });
             console.log(this.debug_results)
-            debugger;
+            //debugger;
         }
     }
 
