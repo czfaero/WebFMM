@@ -147,116 +147,7 @@ export class FMMSolver {
 
         await this.kernel.Init();
 
-        // debug
-        if (this.debug_watch_box_id_pairs) {
-            this.debug_results = this.debug_watch_box_id_pairs.map(pair => {
-
-                const route = this.debug_getRoute(pair.src, pair.dst);
-                console.log("debug route: ", route)
-                if (route[1] == "p2p") {
-                    return "p2p";
-                }
-                const p2m_result = debug_p2m(this, pair.src);
-
-                const results = [];
-                results.push(route);
-                results.push({ step: "p2m", result: p2m_result });
-                let lastResult = p2m_result;
-                for (let i = 0; i < route.length; i++) {
-                    const src = route[i - 1], dst = route[i + 1];
-                    switch (route[i]) {
-                        case "m2m": {
-                            const m2m_result = (() => {
-                                const numLevel = dst.level;
-                                return debug_m2m_p4(this, numLevel, lastResult, src.id, dst.id);
-                            })();
-                            results.push({ step: "m2m", result: m2m_result });
-                            lastResult = m2m_result;
-                            const m2p_result = debug_m2p(this, m2m_result, dst.id, pair.dst, dst.level);
-                            results.push({ step: "m2m-m2p", result: m2p_result });
-
-                        } break;
-                        case "m2l":
-                            {
-                                const m2l_result = (() => {
-                                    const numLevel = src.level;
-                                    return debug_m2l_p4(this, numLevel, lastResult, src.id, dst.id);
-                                })();
-                                results.push({ step: "m2l", result: m2l_result });
-                                lastResult = m2l_result;
-                                if (i + 2 < route.length) {
-                                    const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, pair.dst);
-                                    results.push({ step: "m2l-l2p", result: l2p_result });
-                                }
-                            }
-                            break;
-                        case "l2l": {
-                            const l2l_result = (() => {
-                                const numLevel = src.level;
-                                return debug_l2l_p4(this, numLevel, lastResult, src.id, dst.id);
-                            })();
-                            results.push({ step: "l2l", result: l2l_result });
-                            lastResult = l2l_result;
-                            if (i + 2 < route.length) {
-                                const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, pair.dst);
-                                results.push({ step: "l2l-l2p", result: l2p_result });
-                            }
-                        } break;
-                    }
-                }
-
-                let l2p_box = route[route.length - 1].id;
-
-                const l2p_result = debug_l2p(this, lastResult, l2p_box);
-                results.push({ step: "l2p", result: l2p_result });
-
-                const m2p_result = debug_m2p(this, p2m_result, pair.src, pair.dst);
-                results.push({ step: "m2p", result: m2p_result });
-                let direct_result;
-                // p2p
-                {
-                    const dst_start = tree.nodeStartOffset[pair.dst];
-                    const dst_count = tree.nodeEndOffset[pair.dst] - dst_start + 1;
-                    const src_start = tree.nodeStartOffset[pair.src];
-                    const src_count = tree.nodeEndOffset[pair.src] - src_start + 1;
-
-                    direct_result = new Float32Array(dst_count * 3);
-                    function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-                    function inverseSqrt(x) { return 1 / Math.sqrt(x); }
-                    const eps = 1e-6;
-                    for (let dst_i = 0; dst_i < dst_count; dst_i++) {
-
-                        let accel = { x: 0, y: 0, z: 0 };
-                        let dst = tree.getNode(dst_start + dst_i);
-                        for (let src_i = 0; src_i < src_count; src_i++) {
-                            let src = tree.getNode(src_start + src_i);
-                            let dist = {
-                                x: dst.x - src.x,
-                                y: dst.y - src.y,
-                                z: dst.z - src.z
-                            };
-                            let invDist = inverseSqrt(dot(dist, dist) + eps);
-                            let s = invDist * invDist * invDist;
-                            accel.x += -s * dist.x;
-                            accel.y += -s * dist.y;
-                            accel.z += -s * dist.z;
-                        }
-                        direct_result[dst_i * 3] = accel.x;
-                        direct_result[dst_i * 3 + 1] = accel.y;
-                        direct_result[dst_i * 3 + 2] = accel.z;
-                    }
-                }
-                results.push({ step: "direct", result: direct_result });
-
-
-                return results;
-
-            });
-
-            console.log(this.debug_results)
-            debugger;
-
-        }
+        this.debug_Run();
 
         //     kernel.p2p(numBoxIndex);
         await this.kernel.p2p();
@@ -368,6 +259,117 @@ export class FMMSolver {
 
         debugger;
         throw "route not found";
+    }
+
+    debug_Run() {
+        const tree = this.tree;
+        if (this.debug_watch_box_id_pairs) {
+            this.debug_results = this.debug_watch_box_id_pairs.map(pair => {
+
+                const route = this.debug_getRoute(pair.src, pair.dst);
+                console.log("debug route: ", route)
+                if (route[1] == "p2p") {
+                    return "p2p";
+                }
+                const p2m_result = debug_p2m(this, pair.src);
+
+                const results = [];
+                results.push(route);
+                results.push({ step: "p2m", result: p2m_result });
+                let lastResult = p2m_result;
+                for (let i = 0; i < route.length; i++) {
+                    const src = route[i - 1], dst = route[i + 1];
+                    switch (route[i]) {
+                        case "m2m": {
+                            const m2m_result = (() => {
+                                const numLevel = dst.level;
+                                return debug_m2m_p4(this, numLevel, lastResult, src.id, dst.id);
+                            })();
+                            results.push({ step: "m2m", result: m2m_result });
+                            lastResult = m2m_result;
+                            const m2p_result = debug_m2p(this, m2m_result, dst.id, pair.dst, dst.level);
+                            results.push({ step: "m2m-m2p", result: m2p_result });
+
+                        } break;
+                        case "m2l":
+                            {
+                                const m2l_result = (() => {
+                                    const numLevel = src.level;
+                                    return debug_m2l_p4(this, numLevel, lastResult, src.id, dst.id);
+                                })();
+                                results.push({ step: "m2l", result: m2l_result });
+                                lastResult = m2l_result;
+                                if (i + 2 < route.length) {
+                                    const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, pair.dst);
+                                    results.push({ step: "m2l-l2p", result: l2p_result });
+                                }
+                            }
+                            break;
+                        case "l2l": {
+                            const l2l_result = (() => {
+                                const numLevel = src.level;
+                                return debug_l2l_p4(this, numLevel, lastResult, src.id, dst.id);
+                            })();
+                            results.push({ step: "l2l", result: l2l_result });
+                            lastResult = l2l_result;
+                            if (i + 2 < route.length) {
+                                const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, pair.dst);
+                                results.push({ step: "l2l-l2p", result: l2p_result });
+                            }
+                        } break;
+                    }
+                }
+
+                let l2p_box = route[route.length - 1].id;
+
+                const l2p_result = debug_l2p(this, lastResult, l2p_box);
+                results.push({ step: "l2p", result: l2p_result });
+
+                const m2p_result = debug_m2p(this, p2m_result, pair.src, pair.dst);
+                results.push({ step: "m2p", result: m2p_result });
+                let direct_result;
+                // p2p
+                {
+                    const dst_start = tree.nodeStartOffset[pair.dst];
+                    const dst_count = tree.nodeEndOffset[pair.dst] - dst_start + 1;
+                    const src_start = tree.nodeStartOffset[pair.src];
+                    const src_count = tree.nodeEndOffset[pair.src] - src_start + 1;
+
+                    direct_result = new Float32Array(dst_count * 3);
+                    function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+                    function inverseSqrt(x) { return 1 / Math.sqrt(x); }
+                    const eps = 1e-6;
+                    for (let dst_i = 0; dst_i < dst_count; dst_i++) {
+
+                        let accel = { x: 0, y: 0, z: 0 };
+                        let dst = tree.getNode(dst_start + dst_i);
+                        for (let src_i = 0; src_i < src_count; src_i++) {
+                            let src = tree.getNode(src_start + src_i);
+                            let dist = {
+                                x: dst.x - src.x,
+                                y: dst.y - src.y,
+                                z: dst.z - src.z
+                            };
+                            let invDist = inverseSqrt(dot(dist, dist) + eps);
+                            let s = invDist * invDist * invDist;
+                            accel.x += -s * dist.x;
+                            accel.y += -s * dist.y;
+                            accel.z += -s * dist.z;
+                        }
+                        direct_result[dst_i * 3] = accel.x;
+                        direct_result[dst_i * 3 + 1] = accel.y;
+                        direct_result[dst_i * 3 + 2] = accel.z;
+                    }
+                }
+                results.push({ step: "direct", result: direct_result });
+
+
+                return results;
+
+            });
+            console.log(this.debug_results)
+            debugger;
+        }
     }
 
 }

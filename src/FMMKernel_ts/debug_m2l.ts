@@ -26,6 +26,7 @@ export function factorialCombineM2L(tV: number, bV1, bV2, bV3, bV4, readyValues:
 
 
 export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, dst_box_id) {
+    const log = 0;
     function oddeven(n) {
         if ((n % 2) != 0) { return -1; } else { return 1; }
     }
@@ -69,7 +70,7 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
         fact = fact * (i + 1);
     }
 
-    console.log("-- debug m2l --");
+    if (log) console.log("-- debug m2l --");
     const boxSize = core.tree.rootBoxSize / (2 << numLevel);
 
     const src_index3D = GetIndex3D(tree.boxIndexFull[src_box_id]);
@@ -79,11 +80,13 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
     const sph = cart2sph(dist);
     const rho = sph.x, alpha = sph.y, beta = sph.z;
 
-    console.log("boxSize:", boxSize)
-    console.log(`src box ${src_box_id}`, src_index3D);
-    console.log(`dst box ${dst_box_id}`, dst_index3D);
-    console.log("dist", dist, dist_index3D)
-    console.log("sph", { rho: rho, alpha: alpha, beta: beta })
+    if (log) {
+        console.log("boxSize:", boxSize)
+        console.log(`src box ${src_box_id}`, src_index3D);
+        console.log(`dst box ${dst_box_id}`, dst_index3D);
+        console.log("dist", dist, dist_index3D)
+        console.log("sph", { rho: rho, alpha: alpha, beta: beta })
+    }
 
     const Pnm = CalcALP(2 * numExpansions, cos(alpha));
     const rho_n = new Float32Array(numExpansions);
@@ -143,6 +146,6 @@ export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, d
     for (let t = 0; t < core.MnmSize; t++) {
         thread(t);
     }
-    console.log("-- debug m2l end--");
+    if (log) console.log("-- debug m2l end--");
     return debug_Lnm;
 }

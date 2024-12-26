@@ -20,7 +20,7 @@ export function factorialCombineL2L(tV1, tV2, bV0, bV1, bV2, readyValues: ArrayL
 
 
 export function debug_l2l_p4(core: FMMSolver, numLevel, debug_src_Lnm, src_box_id, dst_box_id) {
-
+    const log = 0;
     function oddeven(n) {
         if ((n % 2) != 0) { return -1; } else { return 1; }
     }
@@ -64,7 +64,7 @@ export function debug_l2l_p4(core: FMMSolver, numLevel, debug_src_Lnm, src_box_i
         fact = fact * (i + 1);
     }
 
-    console.log("-- debug l2l --");
+    if (log) console.log("-- debug l2l --");
     const src_boxSize = core.tree.rootBoxSize / (2 << numLevel);//large one
     const uniforms = {
         boxSize: src_boxSize,
@@ -94,11 +94,13 @@ export function debug_l2l_p4(core: FMMSolver, numLevel, debug_src_Lnm, src_box_i
     const sph = cart2sph(dist);
     const rho = sph.x, alpha = sph.y, beta = sph.z;
 
-    console.log("boxSize:", src_boxSize)
-    console.log(`src box ${src_box_id}@lv${numLevel}`, src_index3D);
-    console.log(`dst box ${dst_box_id}@lv${numLevel + 1}`, dst_index3D);
-    console.log("dist", dist)
-    console.log("sph", { rho: rho, alpha: alpha, beta: beta })
+    if (log) {
+        console.log("boxSize:", src_boxSize)
+        console.log(`src box ${src_box_id}@lv${numLevel}`, src_index3D);
+        console.log(`dst box ${dst_box_id}@lv${numLevel + 1}`, dst_index3D);
+        console.log("dist", dist)
+        console.log("sph", { rho: rho, alpha: alpha, beta: beta })
+    }
 
     const Pnm = CalcALP(2 * numExpansions, cos(alpha));
     const rho_n = new Float32Array(numExpansions);
@@ -166,6 +168,6 @@ export function debug_l2l_p4(core: FMMSolver, numLevel, debug_src_Lnm, src_box_i
     for (let t = 0; t < core.MnmSize; t++) {
         thread(t);
     }
-    console.log("-- debug l2l end--");
+    if (log) console.log("-- debug l2l end--");
     return debug_dst_Lnm;
 }

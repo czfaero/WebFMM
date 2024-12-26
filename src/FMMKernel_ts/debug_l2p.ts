@@ -42,7 +42,8 @@ export function debug_l2p(core: FMMSolver, debug_Lnm, box_id, debug_numlevel = n
 }
 
 function debug_l2p_shader(debug_Lnm, box_id, index, buffers, debug_numLevel, debug_dst_box_id) {
-    console.log("-- debug l2p --")
+    const log = 0;
+    if (log) console.log("-- debug l2p --")
 
     const PI = Math.PI;
     const inv4PI = 0.25 / PI;
@@ -83,10 +84,10 @@ function debug_l2p_shader(debug_Lnm, box_id, index, buffers, debug_numLevel, deb
     let boxCenter = vec3_add([vec3_scale(index3D, boxSize), vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
 
 
-    console.log(`box${index}@${debug_numLevel}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
+    if (log) console.log(`box${index}@${debug_numLevel}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
 
     const node_box_id = debug_dst_box_id ? debug_dst_box_id : box_id;
-    console.log("nodes from ", node_box_id)
+    if (log) console.log("nodes from ", node_box_id)
     const start = buffers.nodeStartOffset[node_box_id];
     const end = buffers.nodeEndOffset[node_box_id];
 
@@ -109,8 +110,8 @@ function debug_l2p_shader(debug_Lnm, box_id, index, buffers, debug_numLevel, deb
         let dist = vec3f(node.x - boxCenter.x, node.y - boxCenter.y, node.z - boxCenter.z);
 
         if (thread_id == 0) {
-            console.log("l2p node0", node);
-            console.log("l2p dist0", dist);
+            if (log) console.log("l2p node0", node);
+            if (log) console.log("l2p dist0", dist);
         }
         let c = cart2sph(dist);
         let r = c.x; let theta = c.y; let phi = c.z;
@@ -155,6 +156,6 @@ function debug_l2p_shader(debug_Lnm, box_id, index, buffers, debug_numLevel, deb
     for (let i = 0; i <= maxNodeCount; i++) {
         thread(i);
     }
-    console.log("-- debug l2p end--")
+    if (log) console.log("-- debug l2p end--")
     return result;
 }

@@ -45,6 +45,7 @@ export function debug_m2p(core: FMMSolver, debug_Mnm, src_box_id, dst_box_id, de
 
 
 function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, debug_numLevel) {
+    const log = 0;
     const PI = Math.PI;
     const inv4PI = 0.25 / PI;
     const eps = 1e-6;
@@ -81,8 +82,8 @@ function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, debug_numLe
     let boxMin = vec3f(uniforms.boxMinX, uniforms.boxMinY, uniforms.boxMinZ);
     let boxCenter = vec3_add([vec3_scale(index3D, boxSize), vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
 
-    console.log("-- debug m2p --");
-    console.log(`src box${src_index}@lv${debug_numLevel}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
+    if (log) console.log("-- debug m2p --");
+    if (log) console.log(`src box${src_index}@lv${debug_numLevel}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
 
     const start = buffers.nodeStartOffset[dst_box_id];
     const end = buffers.nodeEndOffset[dst_box_id];
@@ -108,7 +109,7 @@ function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, debug_numLe
         let r = c.x; let theta = c.y; let phi = c.z;
 
         if (thread_id == 0) {
-            console.log("node0", node, dist, { r: r, theta: theta, phi: phi });
+            if (log) console.log("node0", node, dist, { r: r, theta: theta, phi: phi });
         }
         let accelR = 0, accelTheta = 0, accelPhi = 0;
         let sinTheta = sin(theta), cosTheta = cos(theta), sinPhi = sin(phi), cosPhi = cos(phi);
@@ -149,6 +150,6 @@ function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, debug_numLe
     for (let i = 0; i <= maxNodeCount; i++) {
         thread(i);
     }
-    console.log("-- debug m2p end --");
+    if (log) console.log("-- debug m2p end --");
     return result;
 }

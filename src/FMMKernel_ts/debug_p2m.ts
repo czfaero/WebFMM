@@ -59,6 +59,7 @@ export function debug_p2m(core: FMMSolver, box_id) {
 
 
 function debug_p2m_shader(box_id: number, index: number, buffers: any) {
+    const log = 0;
     function u32(x) { return Math.floor(x); }
     function f32(x) { return x; }
     function i32(x) { return Math.floor(x); }
@@ -82,7 +83,7 @@ function debug_p2m_shader(box_id: number, index: number, buffers: any) {
     function vec3_minus(v) { return { x: -v.x, y: -v.y, z: -v.z } }
     function vec3_scale(v, a) { return { x: v.x * a, y: v.y * a, z: v.z * a }; }
 
-    console.log("-- debug p2m --");
+    if (log) console.log("-- debug p2m --");
 
     const uniforms = buffers.uniforms;
     const numExpansions = uniforms.numExpansions;
@@ -103,8 +104,8 @@ function debug_p2m_shader(box_id: number, index: number, buffers: any) {
     let index3D = GetIndex3D(u32(index));
     let boxMin = vec3f(uniforms.boxMinX, uniforms.boxMinY, uniforms.boxMinZ);
     let boxCenter = vec3_add([vec3_scale(index3D, boxSize), vec3f(0.5 * boxSize, 0.5 * boxSize, 0.5 * boxSize), boxMin]);
-    console.log(`box ${index}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
-    console.log("node count:", end - start + 1)
+    if (log) console.log(`box ${index}`, index3D, " center: ", boxCenter, "\nboxSize: ", boxSize);
+    if (log) console.log("node count:", end - start + 1)
 
     let ng = buffers.ng, mg = buffers.mg;
     let numM = numExpansions * (numExpansions + 1) / 2;
@@ -123,7 +124,7 @@ function debug_p2m_shader(box_id: number, index: number, buffers: any) {
             let rho = r.x; let alpha = r.y; let beta = r.z;
 
             if (thread_id == 0 && particleIndex == start) {
-                console.log("thread0node0:", particle, dist, { rho: rho, alpha: alpha, beta: beta });
+                if (log) console.log("thread0node0:", particle, dist, { rho: rho, alpha: alpha, beta: beta });
             }
 
             // only thread_0_0
@@ -154,6 +155,6 @@ function debug_p2m_shader(box_id: number, index: number, buffers: any) {
         thread(thread_id);
     }
 
-    console.log("-- debug p2m end --");
+    if (log) console.log("-- debug p2m end --");
     return resultBuffer;
 }
