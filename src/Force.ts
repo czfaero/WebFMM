@@ -4,11 +4,11 @@ import { TreeBuilder } from './TreeBuilder';
 
 const k = 1;// spring force coef
 const k_distance = 0.1;// distance when spring 0 force
-const delta = 0.2;//delta time ^2
+const delta = 0.01;//F = accel * delta; 
 var solver: any;
 var next = false;
-const stepMode = false;
-const maxIter = 0;
+const stepMode = 1;
+const maxIter = 1000;
 const msg = document.querySelector("#msg") as HTMLSpanElement;
 
 let tree: TreeBuilder;
@@ -19,7 +19,7 @@ export class Debug_Id_Pair {
     dst: number;
 }
 let debug_watch_box_id_pairs: Array<Debug_Id_Pair> = [];//non-empty id
-
+let debug_runner;
 export function Data_debug_AddWatch(src: number, dst: number) {
 
     debug_watch_box_id_pairs.push({ src: src, dst: dst })
@@ -56,6 +56,7 @@ function GetDist(p1, p2) {
 function GetSquareLength(vec) {
     return vec.x * vec.x + vec.y * vec.y + vec.z * vec.z;
 }
+
 var iterCount = 0;
 export function DataUpdate(
     nodeBuffer: Float32Array,
@@ -66,6 +67,15 @@ export function DataUpdate(
     colorBufferGPU: GPUBuffer,
     device: GPUDevice
 ) {
+    if (debug_watch_box_id_pairs.length > 0) {
+        if (!debug_runner) {
+            tree = new TreeBuilder(nodeBuffer, linkBuffer, colorBuffer);
+            debug_runner = debug_Run(tree);
+        }
+        debug_runner.next();
+        return;
+    }
+
 
 
     if (solver && solver.isDataReady()) {
@@ -91,11 +101,10 @@ export function DataUpdate(
         }
 
         for (let i = 0; i < nodeBuffer.length / 4; i++) {
-            // nodeBuffer[i * 4 + 0] += accelBuffer[i * 3 + 0] * delta;
-            // nodeBuffer[i * 4 + 1] += accelBuffer[i * 3 + 1] * delta;
-            // nodeBuffer[i * 4 + 2] += accelBuffer[i * 3 + 2] * delta;
+            nodeBuffer[i * 4 + 0] += accelBuffer[i * 3 + 0] * delta;
+            nodeBuffer[i * 4 + 1] += accelBuffer[i * 3 + 1] * delta;
+            nodeBuffer[i * 4 + 2] += accelBuffer[i * 3 + 2] * delta;
         }
-
 
         device.queue.writeBuffer(linkBufferGPU, 0, linkBuffer);
         device.queue.writeBuffer(colorBufferGPU, 0, colorBuffer);
@@ -109,23 +118,35 @@ export function DataUpdate(
             next = false;
             if (iterCount > maxIter) { solver = null; return; }
             tree = new TreeBuilder(nodeBuffer, linkBuffer, colorBuffer);
-            //tree.debug_restrict_nodes([0, 15], [0]);
-            //tree.debug_restrict_nodes([0, 15]);
-            //solver = new DirectSolver(tree);
-            solver = new FMMSolver(tree);
-            if (debug_watch_box_id_pairs.length > 0) {
-                solver.debug_watch_box_id_pairs = debug_watch_box_id_pairs;
-            }
-            //solver.debug = true;
-            //solver.kernel.debug=true;
 
+            solver = new DirectSolver(tree);
+            //solver = new FMMSolver(tree);
             solver.main();
+            debugger;
             iterCount++;
         }
     }
-
-    //solver.kernel.debug = true;
 }
+
+
+function* debug_Run(tree) {
+    solver = new DirectSolver(tree);
+    solver.main();
+    while (!solver.dataReady) { yield; }
+    const accelBuffer1 = solver.getAccelBuffer();
+    console.log("Direct", accelBuffer1);
+    yield;
+    solver = new FMMSolver(tree);
+    solver.debug_watch_box_id_pairs = debug_watch_box_id_pairs;
+    solver.debug = true;
+    solver.kernel.debug = true;
+    solver.main();
+    while (!solver.dataReady) { yield; }
+    const accelBuffer2 = solver.getAccelBuffer();
+    console.log("FMM", accelBuffer2);
+    debugger;
+}
+
 
 function RecordVideo() {
     const canvas = document.querySelector("canvas") as HTMLCanvasElement;

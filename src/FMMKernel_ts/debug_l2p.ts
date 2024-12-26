@@ -147,9 +147,9 @@ function debug_l2p_shader(debug_Lnm, box_id, index, buffers, debug_numLevel, deb
             + cosTheta * sinPhi * accelTheta
             + cosPhi * accelPhi;
         let accelZ = cosTheta * accelR - sinTheta * accelTheta;
-        result[thread_id * 3] = accelX;
-        result[thread_id * 3 + 1] = accelY;
-        result[thread_id * 3 + 2] = accelZ;
+        result[thread_id * 3] = -accelX;
+        result[thread_id * 3 + 1] = -accelY;
+        result[thread_id * 3 + 2] = -accelZ;
         //debugger;
     }
     const maxNodeCount = count;// to-do

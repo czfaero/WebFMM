@@ -142,9 +142,9 @@ function debug_m2p_shader(debug_Mnm, dst_box_id, src_index, buffers, debug_numLe
             + cosTheta * sinPhi * accelTheta
             + cosPhi * accelPhi;
         let accelZ = cosTheta * accelR - sinTheta * accelTheta;
-        result[thread_id * 3] = accelX;
-        result[thread_id * 3 + 1] = accelY;
-        result[thread_id * 3 + 2] = accelZ;
+        result[thread_id * 3] = -accelX;
+        result[thread_id * 3 + 1] = -accelY;
+        result[thread_id * 3 + 2] = -accelZ;
     }
     const maxNodeCount = count;// to-do
     for (let i = 0; i <= maxNodeCount; i++) {

@@ -16,6 +16,7 @@ import { debug_m2p } from './FMMKernel_ts/debug_m2p';
 import { FMMKernel_ts } from './FMMKernel_ts/kernel_ts';
 import { debug_l2l_p4 } from './FMMKernel_ts/debug_l2l';
 import { debug_m2m_p4 } from './FMMKernel_ts/debug_m2m';
+import { debug_p2p } from './FMMKernel_ts/debug_p2p';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -327,43 +328,8 @@ export class FMMSolver {
 
                 const m2p_result = debug_m2p(this, p2m_result, pair.src, pair.dst);
                 results.push({ step: "m2p", result: m2p_result });
-                let direct_result;
-                // p2p
-                {
-                    const dst_start = tree.nodeStartOffset[pair.dst];
-                    const dst_count = tree.nodeEndOffset[pair.dst] - dst_start + 1;
-                    const src_start = tree.nodeStartOffset[pair.src];
-                    const src_count = tree.nodeEndOffset[pair.src] - src_start + 1;
-
-                    direct_result = new Float32Array(dst_count * 3);
-                    function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-                    function inverseSqrt(x) { return 1 / Math.sqrt(x); }
-                    const eps = 1e-6;
-                    for (let dst_i = 0; dst_i < dst_count; dst_i++) {
-
-                        let accel = { x: 0, y: 0, z: 0 };
-                        let dst = tree.getNode(dst_start + dst_i);
-                        for (let src_i = 0; src_i < src_count; src_i++) {
-                            let src = tree.getNode(src_start + src_i);
-                            let dist = {
-                                x: dst.x - src.x,
-                                y: dst.y - src.y,
-                                z: dst.z - src.z
-                            };
-                            let invDist = inverseSqrt(dot(dist, dist) + eps);
-                            let s = invDist * invDist * invDist;
-                            accel.x += -s * dist.x;
-                            accel.y += -s * dist.y;
-                            accel.z += -s * dist.z;
-                        }
-                        direct_result[dst_i * 3] = accel.x;
-                        direct_result[dst_i * 3 + 1] = accel.y;
-                        direct_result[dst_i * 3 + 2] = accel.z;
-                    }
-                }
+                let direct_result = debug_p2p(this, pair.src, pair.dst);
                 results.push({ step: "direct", result: direct_result });
-
-
                 return results;
 
             });

@@ -338,7 +338,11 @@ export class NodeLinkRenderer {
             if (frameCount >= 60) {
                 frameCount = 0;
             }
-            logger.innerHTML = `FPS:${(1 / deltaTime).toFixed(1)}`;
+            const fps = 1 / deltaTime;
+            if (fps < 0.1) {
+                debugger; // too slow
+            }
+            logger.innerHTML = `FPS:${(fps).toFixed(1)}`;
         }
 
         const logger = document.createElement('div');

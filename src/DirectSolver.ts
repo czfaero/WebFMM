@@ -86,6 +86,9 @@ export class DirectSolver {
         const threadPerGroup = 128;
 
         let workgroupCount = Math.ceil(this.nodeCount / threadPerGroup);
+        if(workgroupCount>10){
+            //debugger;
+        }
 
         const uniformBuffer = new Float32Array(1);
         uniformBuffer[0] = 0;
@@ -142,28 +145,24 @@ export class DirectSolver {
         const accelBuffer = new Float32Array(this.nodeCount * 3);
         for (let i = 0; i < this.nodeCount; i++) {
             let ax = 0, ay = 0, az = 0;
-            const p1 = this.getNode(i);
+            const dst = this.getNode(i);
             for (let j = 0; j < this.nodeCount; j++) {
                 if (i == j) continue;
-                const p2 = this.getNode(j);
-                let dx = p1.x - p2.x,
-                    dy = p1.y - p2.y,
-                    dz = p1.z - p2.z;
+                const src = this.getNode(j);
+                let dx = dst.x - src.x,
+                    dy = dst.y - src.y,
+                    dz = dst.z - src.z;
                 const invDist = 1.0 / Math.sqrt(dx * dx + dy * dy + dz * dz + eps);
-                const invDistCube = p2.w * invDist * invDist * invDist;
-                ax -= dx * invDistCube;
-                ay -= dy * invDistCube;
-                az -= dz * invDistCube;
+                const invDistCube = invDist * invDist * invDist;
+                const s = dst.w * src.w * invDistCube;
+                ax += dx * s;
+                ay += dy * s;
+                az += dz * s;
             }
-            accelBuffer[i * 3] = -inv4PI * ax;
-            accelBuffer[i * 3 + 1] = -inv4PI * ay;
-            accelBuffer[i * 3 + 2] = -inv4PI * az;
+            accelBuffer[i * 3] = ax;
+            accelBuffer[i * 3 + 1] = ay;
+            accelBuffer[i * 3 + 2] = az;
         }
         this.accelBuffer = accelBuffer;
-    }
-
-    debug_Calc_box(box_src, box2_dst) {
-        this.tree.boxIndexFull
-
     }
 }
