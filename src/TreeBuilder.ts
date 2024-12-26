@@ -185,12 +185,12 @@ export class TreeBuilder {
      */
     levelBoxCounts: Int32Array;
     /**
-     * first node in each box, by non-empty id
+     * first node in each box, access by non-empty id  
      * int[numBoxIndexLeaf]
      */
     nodeStartOffset: Int32Array;
     /**
-     * last node in each box, by non-empty id
+     * last node in each box, access by non-empty id  
      * int[numBoxIndexLeaf]
      */
     nodeEndOffset: Int32Array;
