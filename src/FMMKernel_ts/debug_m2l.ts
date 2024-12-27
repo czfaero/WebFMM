@@ -24,9 +24,9 @@ export function factorialCombineM2L(tV: number, bV1, bV2, bV3, bV4, readyValues:
 }
 
 
-
 export function debug_m2l_p4(core: FMMSolver, numLevel, debug_Mnm, src_box_id, dst_box_id) {
-    const log = 0;
+    let log = 0;
+    //if (dst_box_id == 0) {log = 1;}
     function oddeven(n) {
         if ((n % 2) != 0) { return -1; } else { return 1; }
     }

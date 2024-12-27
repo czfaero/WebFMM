@@ -1,11 +1,12 @@
 import { FMMSolver } from './FMMSolver';
 import { DirectSolver } from './DirectSolver';
 import { TreeBuilder } from './TreeBuilder';
+import { INBodySolver } from './INBodySolver';
 
 const k = 1;// spring force coef
 const k_distance = 0.1;// distance when spring 0 force
 const delta = 0.01;//F = accel * delta; 
-var solver: any;
+var solver: INBodySolver;
 var next = false;
 const stepMode = 1;
 const maxIter = 1000;
@@ -132,7 +133,7 @@ export function DataUpdate(
 function* debug_Run(tree) {
     solver = new DirectSolver(tree);
     solver.main();
-    while (!solver.dataReady) { yield; }
+    while (!solver.isDataReady()) { yield; }
     const accelBuffer1 = solver.getAccelBuffer();
     console.log("Direct", accelBuffer1);
     yield;
@@ -141,7 +142,7 @@ function* debug_Run(tree) {
     solver.debug = true;
     solver.kernel.debug = true;
     solver.main();
-    while (!solver.dataReady) { yield; }
+    while (!solver.isDataReady()) { yield; }
     const accelBuffer2 = solver.getAccelBuffer();
     console.log("FMM", accelBuffer2);
     debugger;

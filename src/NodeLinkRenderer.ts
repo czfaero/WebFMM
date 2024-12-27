@@ -340,7 +340,7 @@ export class NodeLinkRenderer {
             }
             const fps = 1 / deltaTime;
             if (fps < 0.1) {
-                debugger; // too slow
+               // debugger; // too slow
             }
             logger.innerHTML = `FPS:${(fps).toFixed(1)}`;
         }

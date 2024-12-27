@@ -1,9 +1,10 @@
+import { INBodySolver } from './INBodySolver';
 import wgsl from './shaders/Direct.wgsl';
 import { TreeBuilder } from './TreeBuilder';
 const SIZEOF_32 = 4;
 const eps = 1e-6;
 const inv4PI = 0.25 / Math.PI;
-export class DirectSolver {
+export class DirectSolver implements INBodySolver {
     tree: TreeBuilder;
     adapter: GPUAdapter;
     device: GPUDevice;

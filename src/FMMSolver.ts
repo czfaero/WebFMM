@@ -1,6 +1,6 @@
 import wgsl from './shaders/FMM.wgsl';
 
-import { IFMMKernel } from './FMMKernel';
+import { IFMMKernel } from './IFMMKernel';
 import { KernelWgpu } from './FMMKernel_wgpu/kernel_wgpu';
 //import { KernelTs } from './kernels/kernel_ts';
 import { TreeBuilder } from './TreeBuilder';
@@ -17,27 +17,24 @@ import { FMMKernel_ts } from './FMMKernel_ts/kernel_ts';
 import { debug_l2l_p4 } from './FMMKernel_ts/debug_l2l';
 import { debug_m2m_p4 } from './FMMKernel_ts/debug_m2m';
 import { debug_p2p } from './FMMKernel_ts/debug_p2p';
+import { INBodySolver } from './INBodySolver';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
 
-export class FMMSolver {
+export class FMMSolver implements INBodySolver {
     // Basic data and helper
 
     debug_watch_box_id_pairs: Array<Debug_Id_Pair>;//non-empty id
 
     debug_results;
 
-
     getNode(i: number) {
         return this.tree.getNode(i);
     }
 
-
-
-
     interactionList: any;
-    /** int[numBoxIndexLeaf]; reused for InteractionList */
+    /** int[numBoxIndexLeaf]; reused for interactionList */
     interactionCounts: Int32Array;
 
     getBoxRange(offset: number, count: number) {
@@ -141,18 +138,19 @@ export class FMMSolver {
     }
 
     kernel: IFMMKernel;
+    dataReady: boolean;
     async main() {
         const tree = this.tree;
 
         await this.kernel.Init();
 
-        this.debug_Run();
+        // this.debug_Run();
 
         this.setInteractionListP2P();
         await this.kernel.p2p();
         await this.kernel.p2m();
 
-        for (let numLevel = tree.maxLevel - 1; numLevel >= 2; numLevel--) {
+        for (let numLevel = tree.maxLevel - 2; numLevel >= 1; numLevel--) {
             await this.kernel.m2m(numLevel);
         }
 
@@ -166,14 +164,15 @@ export class FMMSolver {
         }
 
         await this.kernel.l2p();
-
         this.kernel.Release();
+        this.dataReady = true;
     }
 
     numExpansions: number;
     numExpansion2: number;
     numExpansion4: number;
     numCoefficients: number;
+    /** =numExpansion2 */
     MnmSize: number;
     DnmSize: number;
 
@@ -201,12 +200,17 @@ export class FMMSolver {
     }
 
     isDataReady() {
-        return this.kernel.dataReady;
+        return this.dataReady;
     }
     getAccelBuffer() {
-        throw "pause";
+        return this.kernel.accelBuffer;
     }
 
+    /** example: 
+    [{"id": 1, "level": 1, "index3D": {"x":0, "y":1, "z":0}},
+    "m2l",
+    {"id": 15, "level": 1, "index3D": {"x":1, "y":3, "z":1}}]
+    */
     debug_getRoute(id1: number, id2: number) {
         const tree = this.tree;
         let levelOffset = 0;
@@ -257,76 +261,120 @@ export class FMMSolver {
         throw "route not found";
     }
 
+    debug_TestRoute(route) {
+
+        const p_src = route[0];
+        const p_dst = route[route.length - 1];
+
+
+        if (route[1] == "p2p") {
+            return [{ step: "direct", result: debug_p2p(this, p_src.id, p_dst.id) }];
+        }
+
+        const p2m_result = debug_p2m(this, p_src.id);
+
+        const results = [];
+        results.push(route);
+        results.push({ step: "p2m", result: p2m_result });
+        let lastResult = p2m_result;
+        for (let i = 0; i < route.length; i++) {
+            const src = route[i - 1], dst = route[i + 1];
+            switch (route[i]) {
+                case "m2m": {
+                    const m2m_result = (() => {
+                        const numLevel = dst.level;
+                        return debug_m2m_p4(this, numLevel, lastResult, src.id, dst.id);
+                    })();
+                    results.push({ step: "m2m", result: m2m_result });
+                    lastResult = m2m_result;
+                    const m2p_result = debug_m2p(this, m2m_result, dst.id, p_dst.id, dst.level);
+                    results.push({ step: "m2m-m2p", result: m2p_result });
+
+                } break;
+                case "m2l":
+                    {
+                        const m2l_result = (() => {
+                            const numLevel = src.level;
+                            return debug_m2l_p4(this, numLevel, lastResult, src.id, dst.id);
+                        })();
+                        results.push({ step: "m2l", result: m2l_result });
+                        lastResult = m2l_result;
+                        if (i + 2 < route.length) {
+                            const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, p_dst.id);
+                            results.push({ step: "m2l-l2p", result: l2p_result });
+                        }
+                    }
+                    break;
+                case "l2l": {
+                    const l2l_result = (() => {
+                        const numLevel = src.level;
+                        return debug_l2l_p4(this, numLevel, lastResult, src.id, dst.id);
+                    })();
+                    results.push({ step: "l2l", result: l2l_result });
+                    lastResult = l2l_result;
+                    if (i + 2 < route.length) {
+                        const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, p_dst.id);
+                        results.push({ step: "l2l-l2p", result: l2p_result });
+                    }
+                } break;
+            }
+        }
+
+        let l2p_box = route[route.length - 1].id;
+
+        const l2p_result = debug_l2p(this, lastResult, l2p_box);
+        results.push({ step: "l2p", result: l2p_result });
+
+        const m2p_result = debug_m2p(this, p2m_result, p_src.id, p_dst.id);
+        results.push({ step: "m2p", result: m2p_result });
+        let direct_result = debug_p2p(this, p_src.id, p_dst.id);
+        results.push({ step: "direct", result: direct_result });
+        return results;
+    }
+
     debug_Run() {
         const tree = this.tree;
+
+        if (1) {
+            const dst = 0;
+            const results = [];
+            let sum_direct = 0, sum_nonP2P = 0, sum_P2P = 0, sum_FMM = 0;
+            let Lnm = new Float32Array(this.MnmSize * 2);
+            let Lnm_count = 0;
+            for (let i = 0; i < tree.numBoxIndexLeaf; i++) {
+                const route = this.debug_getRoute(i, dst);
+                const r = this.debug_TestRoute(route);
+                sum_direct += r.find(x => x.step == "direct").result[0];
+
+                let l2p_result = r.find(x => x.step == "l2p");
+                if (l2p_result) {
+                    sum_nonP2P += l2p_result.result[0];
+                    let m2l_result = r.find(x => x.step == "m2l");
+                    Lnm_count++;
+                    m2l_result.result.forEach((v, j) => { Lnm[j] += v; })
+                } else {
+                    sum_P2P += r.find(x => x.step == "direct").result[0];
+                }
+                sum_FMM = sum_P2P + sum_nonP2P;
+
+                results.push(r);
+            }
+            console.log("FMM", sum_FMM, "=non-P2P", sum_nonP2P, "+P2P", sum_P2P, " LnmTest", Lnm_count, Lnm);
+            console.log(results);
+            //debugger;
+            return;
+        }
+
+
         if (this.debug_watch_box_id_pairs) {
             this.debug_results = this.debug_watch_box_id_pairs.map(pair => {
-
+                if (pair.src >= tree.numBoxIndexLeaf || pair.dst >= tree.numBoxIndexLeaf) {
+                    return
+                }
                 const route = this.debug_getRoute(pair.src, pair.dst);
                 console.log("debug route: ", route)
-                if (route[1] == "p2p") {
-                    return "p2p";
-                }
-                const p2m_result = debug_p2m(this, pair.src);
 
-                const results = [];
-                results.push(route);
-                results.push({ step: "p2m", result: p2m_result });
-                let lastResult = p2m_result;
-                for (let i = 0; i < route.length; i++) {
-                    const src = route[i - 1], dst = route[i + 1];
-                    switch (route[i]) {
-                        case "m2m": {
-                            const m2m_result = (() => {
-                                const numLevel = dst.level;
-                                return debug_m2m_p4(this, numLevel, lastResult, src.id, dst.id);
-                            })();
-                            results.push({ step: "m2m", result: m2m_result });
-                            lastResult = m2m_result;
-                            const m2p_result = debug_m2p(this, m2m_result, dst.id, pair.dst, dst.level);
-                            results.push({ step: "m2m-m2p", result: m2p_result });
-
-                        } break;
-                        case "m2l":
-                            {
-                                const m2l_result = (() => {
-                                    const numLevel = src.level;
-                                    return debug_m2l_p4(this, numLevel, lastResult, src.id, dst.id);
-                                })();
-                                results.push({ step: "m2l", result: m2l_result });
-                                lastResult = m2l_result;
-                                if (i + 2 < route.length) {
-                                    const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, pair.dst);
-                                    results.push({ step: "m2l-l2p", result: l2p_result });
-                                }
-                            }
-                            break;
-                        case "l2l": {
-                            const l2l_result = (() => {
-                                const numLevel = src.level;
-                                return debug_l2l_p4(this, numLevel, lastResult, src.id, dst.id);
-                            })();
-                            results.push({ step: "l2l", result: l2l_result });
-                            lastResult = l2l_result;
-                            if (i + 2 < route.length) {
-                                const l2p_result = debug_l2p(this, lastResult, dst.id, dst.level, pair.dst);
-                                results.push({ step: "l2l-l2p", result: l2p_result });
-                            }
-                        } break;
-                    }
-                }
-
-                let l2p_box = route[route.length - 1].id;
-
-                const l2p_result = debug_l2p(this, lastResult, l2p_box);
-                results.push({ step: "l2p", result: l2p_result });
-
-                const m2p_result = debug_m2p(this, p2m_result, pair.src, pair.dst);
-                results.push({ step: "m2p", result: m2p_result });
-                let direct_result = debug_p2p(this, pair.src, pair.dst);
-                results.push({ step: "direct", result: direct_result });
-                return results;
-
+                return this.debug_TestRoute(route);
             });
             console.log(this.debug_results)
             //debugger;
