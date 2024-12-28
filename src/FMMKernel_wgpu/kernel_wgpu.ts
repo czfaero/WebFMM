@@ -1,10 +1,10 @@
-import wgsl_p2p from '../shaders/FMM_p2p.wgsl';
-import wgsl_p2m from '../shaders/FMM_p2m.wgsl';
-import wgsl_m2m from '../shaders/FMM_m2m.wgsl';
-import wgsl_m2l from '../shaders/FMM_m2l.wgsl';
-import wgsl_l2l from '../shaders/FMM_l2l.wgsl';
-import wgsl_l2p from '../shaders/FMM_l2p.wgsl';
-import wgsl_buffer_sum from '../shaders/buffer_sum.wgsl';
+import wgsl_p2p from './shaders/FMM_p2p.wgsl';
+import wgsl_p2m from './shaders/FMM_p2m.wgsl';
+import wgsl_m2m from './shaders/FMM_m2m.wgsl';
+import wgsl_m2l from './shaders/FMM_m2l.wgsl';
+import wgsl_l2l from './shaders/FMM_l2l.wgsl';
+import wgsl_l2p from './shaders/FMM_l2p.wgsl';
+//import wgsl_buffer_sum from '../shaders/buffer_sum.wgsl';
 
 import { cart2sph, GetIndex3D, GetIndexFrom3D } from "../utils";
 import { IFMMKernel } from '../IFMMKernel';
@@ -161,9 +161,8 @@ export class KernelWgpu implements IFMMKernel {
       m2l: wgsl_m2l,
       l2l: wgsl_l2l,
       l2p: wgsl_l2p,
-      sum: wgsl_buffer_sum,
     }
-    const nameList = "p2p p2m m2m m2l l2l l2p sum".split(" ");
+    const nameList = "p2p p2m m2m m2l l2l l2p".split(" ");
     for (const n of nameList) {
       this.shaders[n] = this.device.createShaderModule({
         code: this.shaders[n],
