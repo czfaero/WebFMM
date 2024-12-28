@@ -55,7 +55,7 @@ export class FMMKernel_ts implements IFMMKernel {
                 boxAccel.forEach((v, k) => this.accelBuffer[accelOffset + k] += v);
             }
         }
-        this.debug_info.push({ step: "P2M", time: performance.now() - time });
+        this.debug_info.push({ step: "P2P", time: performance.now() - time });
     }
 
     async p2m() {
