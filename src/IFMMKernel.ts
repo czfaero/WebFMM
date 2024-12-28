@@ -27,5 +27,6 @@ export interface IFMMKernel {
     l2l: (numLevel: number) => Promise<void>;
     l2p: () => Promise<void>;
     Release: () => void;
+    debug_info?: any;
     // constructor(core: FMMSolver) {this.core = core;} // how to define this?
 }

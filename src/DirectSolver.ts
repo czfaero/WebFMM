@@ -19,19 +19,22 @@ export class DirectSolver implements INBodySolver {
     accelBuffer: Float32Array;
     useWgpu: boolean;
 
+    debug_info: any;
+
 
     isDataReady() { return this.dataReady; }
     getAccelBuffer() { return this.accelBuffer; }
 
-    constructor(tree: TreeBuilder) {
+    constructor(tree: TreeBuilder, useWgpu = true) {
         this.nodeBuffer = tree.nodeBuffer;
         this.tree = tree;
         this.nodeCount = this.nodeBuffer.length / 4;
-        this.useWgpu = true;
+        this.useWgpu = useWgpu;
     }
 
 
     async main() {
+        const time = performance.now();
         if (this.useWgpu) {
             await this.Init_wgpu();
             await this.Calc_wgpu();
@@ -40,6 +43,7 @@ export class DirectSolver implements INBodySolver {
             this.Calc();
         }
         this.dataReady = true;
+        this.debug_info = [{ time: performance.now() - time }];
     }
 
 
@@ -87,7 +91,7 @@ export class DirectSolver implements INBodySolver {
         const threadPerGroup = 128;
 
         let workgroupCount = Math.ceil(this.nodeCount / threadPerGroup);
-        if(workgroupCount>10){
+        if (workgroupCount > 10) {
             //debugger;
         }
 

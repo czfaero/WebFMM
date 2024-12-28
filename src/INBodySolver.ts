@@ -10,5 +10,6 @@ export interface INBodySolver {
     // for debug
     debug_watch_box_id_pairs?: any;
     debug?: any;
+    debug_info?: any;
     kernel?: any;
 }

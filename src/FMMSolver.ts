@@ -1,7 +1,7 @@
-import wgsl from './shaders/FMM.wgsl';
+
 
 import { IFMMKernel } from './IFMMKernel';
-import { KernelWgpu } from './FMMKernel_wgpu/kernel_wgpu';
+
 //import { KernelTs } from './kernels/kernel_ts';
 import { TreeBuilder } from './TreeBuilder';
 
@@ -18,6 +18,7 @@ import { debug_l2l_p4 } from './FMMKernel_ts/debug_l2l';
 import { debug_m2m_p4 } from './FMMKernel_ts/debug_m2m';
 import { debug_p2p } from './FMMKernel_ts/debug_p2p';
 import { INBodySolver } from './INBodySolver';
+import { FMMKernel_wgsl } from './FMMKernel_wgpu/kernel_wgsl';
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -28,6 +29,7 @@ export class FMMSolver implements INBodySolver {
     debug_watch_box_id_pairs: Array<Debug_Id_Pair>;//non-empty id
 
     debug_results;
+    debug_info: any;
 
     getNode(i: number) {
         return this.tree.getNode(i);
@@ -140,6 +142,7 @@ export class FMMSolver implements INBodySolver {
     kernel: IFMMKernel;
     dataReady: boolean;
     async main() {
+        const time = performance.now();
         const tree = this.tree;
 
         await this.kernel.Init();
@@ -166,21 +169,24 @@ export class FMMSolver implements INBodySolver {
         await this.kernel.l2p();
         this.kernel.Release();
         this.dataReady = true;
+
+        this.debug_info.push({ time: performance.now() - time });
+        this.debug_info.push(this.kernel.debug_info);
+
+
     }
 
     numExpansions: number;
     numExpansion2: number;
     numExpansion4: number;
-    numCoefficients: number;
     /** =numExpansion2 */
     MnmSize: number;
-    DnmSize: number;
 
     tree: TreeBuilder;
 
     constructor(tree: TreeBuilder, kernelName: string = "ts") {
         const TKernel = {
-            "wgpu": KernelWgpu,
+            "wgsl": FMMKernel_wgsl,
             "ts": FMMKernel_ts
         }[kernelName];
         if (!TKernel) throw "Unknown Kernel: " + kernelName;
@@ -188,11 +194,12 @@ export class FMMSolver implements INBodySolver {
         this.kernel = new TKernel(this);
         this.tree = tree;
 
+        this.debug_info = []
+
         // constants
         this.numExpansions = 10;
         this.numExpansion2 = this.numExpansions * this.numExpansions;
         this.numExpansion4 = this.numExpansion2 * this.numExpansion2;
-        this.numCoefficients = this.numExpansions * (this.numExpansions + 1) / 2;
         this.MnmSize = this.numExpansion2;
 
         this.interactionCounts = new Int32Array(tree.numBoxIndexLeaf);
