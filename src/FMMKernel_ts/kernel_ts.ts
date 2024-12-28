@@ -39,7 +39,7 @@ export class FMMKernel_ts implements IFMMKernel {
 
     }
     async p2p() {
-        console.log("TS P2P");
+        const time = performance.now();
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[tree.maxLevel - 1]; //non-empty
@@ -55,10 +55,11 @@ export class FMMKernel_ts implements IFMMKernel {
                 boxAccel.forEach((v, k) => this.accelBuffer[accelOffset + k] += v);
             }
         }
+        console.log("TS P2P: ", performance.now() - time);
     }
 
     async p2m() {
-        console.log("TS P2M");
+        const time = performance.now();
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[tree.maxLevel - 1]; //non-empty
@@ -69,9 +70,10 @@ export class FMMKernel_ts implements IFMMKernel {
             let MnmOffset = this.getMnmOffset(tree.maxLevel - 1, i);
             this.Mnm.set(boxMnm, MnmOffset);
         }
+        console.log("TS P2M", performance.now() - time);
     }
     async m2m(numLevel: number) {
-        console.log(`TS M2M@${numLevel + 1}->${numLevel}`);
+        const time = performance.now();
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[numLevel]; //non-empty
@@ -94,9 +96,10 @@ export class FMMKernel_ts implements IFMMKernel {
             this.Mnm.set(dst_boxMnm_total, this.getMnmOffset(numLevel, i));
 
         }
+        console.log(`TS M2M@${numLevel + 1}->${numLevel}`, performance.now() - time);
     }
     async m2l(numLevel: number) {
-        console.log("TS M2L@" + numLevel);
+        const time = performance.now();
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[numLevel]; //non-empty
@@ -113,11 +116,13 @@ export class FMMKernel_ts implements IFMMKernel {
                 const boxLnm = debug_m2l_p4(core, numLevel, boxMnm, src_box_id, dst_box_id);
                 boxLnm.forEach((v, k) => this.Lnm[LnmOffset + k] += v);
             }
-            
+
         }
+        console.log("TS M2L@" + numLevel, performance.now() - time);
     }
     async l2l(numLevel: number) {
-        console.log(`TS L2L@${numLevel}->${numLevel + 1}`);
+        const time = performance.now();
+
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[numLevel]; //non-empty
@@ -139,9 +144,10 @@ export class FMMKernel_ts implements IFMMKernel {
                 }
             }
         }
+        console.log(`TS L2L@${numLevel}->${numLevel + 1}`, performance.now() - time);
     }
     async l2p() {
-        console.log("TS L2P");
+        const time = performance.now();
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[tree.maxLevel - 1]; //non-empty
@@ -154,6 +160,7 @@ export class FMMKernel_ts implements IFMMKernel {
             let accelOffset = tree.nodeStartOffset[box_id] * 3;
             boxAccel.forEach((v, k) => this.accelBuffer[accelOffset + k] += v);
         }
+        console.log("TS L2P", performance.now() - time);
     }
 
     Release() { }
