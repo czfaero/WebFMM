@@ -14,7 +14,6 @@ import { debug_p2p } from "./debug_p2p";
 export class FMMKernel_ts implements IFMMKernel {
     core: FMMSolver;
     debug: boolean;
-    dataReady: boolean;
     accelBuffer: Float32Array;
     /**
      * index same as tree.boxIndexFull
@@ -28,7 +27,6 @@ export class FMMKernel_ts implements IFMMKernel {
     }
     constructor(core: FMMSolver) {
         this.core = core;
-        this.dataReady = false;
     }
     async Init() {
         const core = this.core;
