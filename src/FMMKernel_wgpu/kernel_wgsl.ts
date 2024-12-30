@@ -75,7 +75,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
         this.accelBuffer = new Float32Array(tree.nodeCount * 3);
         this.adapter = await navigator.gpu.requestAdapter();
         this.device = await this.adapter.requestDevice();
-        this.maxThreadPerGroup = this.device.limits.maxComputeInvocationsPerWorkgroup / 2;
+        this.maxThreadPerGroup = this.device.limits.maxComputeInvocationsPerWorkgroup;
         this.InitShaders();
 
         // GPU buffers
@@ -387,7 +387,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
         const view = new DataView(uniformBuffer);
         // https://www.w3.org/TR/WGSL/
         // "numeric values in host-shared buffers are stored in little-endian format."
-        const littleEndian = true; 
+        const littleEndian = true;
         keys.forEach((key, i) => {
             switch (struct[key]) {
                 case "u32":

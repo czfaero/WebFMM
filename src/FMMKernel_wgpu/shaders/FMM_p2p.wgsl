@@ -59,8 +59,4 @@ fn p2p(@builtin(global_invocation_id) id : vec3<u32>) {
     accelBuffer[dst_node_id * 3] = accel.x;
     accelBuffer[dst_node_id * 3 + 1] = accel.y;
     accelBuffer[dst_node_id * 3 + 2] = accel.z;
-
-    // accelBuffer[dst_node_id * 3] = debug_temp;
-    // accelBuffer[dst_node_id * 3 + 1] = f32(dst_box_id);
-    // accelBuffer[dst_node_id * 3 + 2] = f32(1111111);
 }
