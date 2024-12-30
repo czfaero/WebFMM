@@ -191,7 +191,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             }
             , uniforms_p2p);
         await this.RunCompute("p2p",
-            [this.uniformBufferGPU, this.nodeBufferGPU, this.accelBufferGPU, this.nodeOffsetBufferGPU, this.interactionListGPU],
+            [this.uniformBufferGPU, this.nodeBufferGPU, this.nodeOffsetBufferGPU, this.interactionListGPU, this.accelBufferGPU],
             workgroupCount,
             waitDone,
             this.accelBufferGPU, // debug  to Read

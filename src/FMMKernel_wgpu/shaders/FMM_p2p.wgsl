@@ -3,10 +3,10 @@
 #include uniforms_p2p_def;
 
 @group(0) @binding(0) var<uniform> uniforms : Uniforms;
-@group(0) @binding(1) var<storage, read_write> nodeBuffer: array<f32>;
-@group(0) @binding(2) var<storage, read_write> accelBuffer: array<f32>;
-@group(0) @binding(3) var<storage, read> nodeOffsetBuffer: array<u32>;
-@group(0) @binding(4) var<storage, read> interactionList: array<u32>;
+@group(0) @binding(1) var<storage, read> nodeBuffer: array<f32>;
+@group(0) @binding(2) var<storage, read> nodeOffsetBuffer: array<u32>;
+@group(0) @binding(3) var<storage, read> interactionList: array<u32>;
+@group(0) @binding(4) var<storage, read_write> accelBuffer: array<f32>;
 
 
 fn getNode(i : u32) -> vec4f{
