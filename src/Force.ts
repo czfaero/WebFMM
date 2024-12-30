@@ -144,14 +144,7 @@ function* debug_Run(tree) {
     const accelBuffer3 = solver.getAccelBuffer();
     console.log("FMM GPU", solver.debug_info, accelBuffer3);
     yield;
-    //debugger;
-
-    solver = new DirectSolver(tree, false);
-    solver.main();
-    while (!solver.isDataReady()) { yield; }
-    const accelBuffer4 = solver.getAccelBuffer();
-    console.log("Direct CPU", solver.debug_info, accelBuffer4);
-    yield;
+    debugger;
 
     solver = new FMMSolver(tree);
     solver.debug_watch_box_id_pairs = debug_watch_box_id_pairs;
@@ -162,6 +155,13 @@ function* debug_Run(tree) {
     const accelBuffer2 = solver.getAccelBuffer();
     console.log("FMM CPU", solver.debug_info, accelBuffer2);
     debugger;
+
+    solver = new DirectSolver(tree, false);
+    solver.main();
+    while (!solver.isDataReady()) { yield; }
+    const accelBuffer4 = solver.getAccelBuffer();
+    console.log("Direct CPU", solver.debug_info, accelBuffer4);
+    yield;
 }
 
 
