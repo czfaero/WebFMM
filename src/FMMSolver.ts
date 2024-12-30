@@ -151,8 +151,11 @@ export class FMMSolver implements INBodySolver {
 
         this.setInteractionListP2P();
         await this.kernel.p2p();
+
         await this.kernel.p2m();
 
+
+        ;this.dataReady = true;return;//debug shortcut
         for (let numLevel = tree.maxLevel - 2; numLevel >= 1; numLevel--) {
             await this.kernel.m2m(numLevel);
         }

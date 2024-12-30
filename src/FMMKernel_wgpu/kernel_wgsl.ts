@@ -4,6 +4,8 @@ import wgsl_m2m from './shaders/FMM_m2m.wgsl';
 import wgsl_m2l from './shaders/FMM_m2l.wgsl';
 import wgsl_l2l from './shaders/FMM_l2l.wgsl';
 import wgsl_l2p from './shaders/FMM_l2p.wgsl';
+import wgsl_CalcALP_R from './shaders/CalcALP_R.wgsl';
+import wgsl_GetIndex3D from './shaders/GetIndex3D.wgsl';
 
 import { FMMSolver } from "../FMMSolver";
 import { IFMMKernel } from "../IFMMKernel";
@@ -19,8 +21,16 @@ const uniforms_p2p = {
     boxCount: u32,
 };
 
+const uniforms_p2m = {
+    boxMinX: f32,
+    boxMinY: f32,
+    boxMinZ: f32,
+    boxSize: f32,
+    boxCount: u32,
+};
+
 const uniform_structs =
-    { uniforms_p2p };
+    { uniforms_p2p, uniforms_p2m };
 
 export class FMMKernel_wgsl implements IFMMKernel {
     core: FMMSolver;
@@ -128,23 +138,16 @@ export class FMMKernel_wgsl implements IFMMKernel {
     async precalc() {
         const core = this.core;
 
-        let i2nm = new Int32Array(core.MnmSize * 4);
+        let i2nm = new Int32Array(core.MnmSize * 2);
         this.i2nmBufferGPU = this.device.createBuffer({
             size: i2nm.byteLength,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         });
         for (let n = 0; n < core.numExpansions; n++) {
-            for (let m = 0; m <= n; m++) {
-                let i = n * (n + 1) / 2 + m;
-                i2nm[i * 4 + 0] = n;
-                i2nm[i * 4 + 1] = m;
-            }
-        }
-        for (let n = 0; n < core.numExpansions; n++) {
             for (let m = -n; m <= n; m++) {
                 let i = n * n + n + m;
-                i2nm[i * 4 + 2] = n;
-                i2nm[i * 4 + 3] = m;
+                i2nm[i * 4 + 0] = n;
+                i2nm[i * 4 + 1] = m;
             }
         }
         this.device.queue.writeBuffer(this.i2nmBufferGPU, 0, i2nm);
@@ -274,6 +277,8 @@ export class FMMKernel_wgsl implements IFMMKernel {
             PI: { v: Math.PI, t: f32 },
             eps: { v: 1e-6, t: f32 },
             maxM2LInteraction: { v: maxM2LInteraction, t: u32 },
+            numExpansions: { v: this.core.numExpansions, t: u32 },
+            MnmSize: { v: this.core.MnmSize, t: u32 },
         };
 
         const contants_wsgl = Object.keys(contants)
@@ -284,6 +289,8 @@ export class FMMKernel_wgsl implements IFMMKernel {
 
         const includeSrc = {
             contants: contants_wsgl,
+            CalcALP_R: wgsl_CalcALP_R,
+            GetIndex3D: wgsl_GetIndex3D,
         };
 
         const uniform_names = Object.keys(uniform_structs);
