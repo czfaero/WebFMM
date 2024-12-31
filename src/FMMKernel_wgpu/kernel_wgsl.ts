@@ -4,8 +4,11 @@ import wgsl_m2m from './shaders/FMM_m2m.wgsl';
 import wgsl_m2l from './shaders/FMM_m2l.wgsl';
 import wgsl_l2l from './shaders/FMM_l2l.wgsl';
 import wgsl_l2p from './shaders/FMM_l2p.wgsl';
+import wgsl_CalcALP from './shaders/CalcALP.wgsl';
 import wgsl_CalcALP_R from './shaders/CalcALP_R.wgsl';
 import wgsl_GetIndex3D from './shaders/GetIndex3D.wgsl';
+import wgsl_cart2sph from './shaders/cart2sph.wgsl'
+import wgsl_getNode from './shaders/getNode.wgsl';
 
 import { FMMSolver } from "../FMMSolver";
 import { IFMMKernel } from "../IFMMKernel";
@@ -27,6 +30,7 @@ const uniforms_p2m = {
     boxMinZ: f32,
     boxSize: f32,
     boxCount: u32,
+    maxBoxNodeCount: u32,
 };
 
 const uniform_structs =
@@ -53,6 +57,9 @@ export class FMMKernel_wgsl implements IFMMKernel {
     nodeBufferGPU: GPUBuffer;
     /** [...tree.nodeStartOffset, ...tree.nodeEndOffset] */
     nodeOffsetBufferGPU: GPUBuffer;
+    boxFullIndexGPU: GPUBuffer;
+
+    maxBoxNodeCount: number;
 
     accelBufferGPU: GPUBuffer;
     /** Need this due to WebGPU restriction */
@@ -88,6 +95,11 @@ export class FMMKernel_wgsl implements IFMMKernel {
         this.maxThreadPerGroup = this.device.limits.maxComputeInvocationsPerWorkgroup;
         this.InitShaders();
 
+        if (this.debug) {
+            this.Mnm = new Float32Array(core.MnmSize * 2 * tree.numBoxIndexTotal);
+            this.Lnm = new Float32Array(core.MnmSize * 2 * tree.numBoxIndexTotal);
+        }
+
         // GPU buffers
         this.nodeBufferGPU = this.device.createBuffer({
             size: tree.nodeBuffer.byteLength,
@@ -101,6 +113,12 @@ export class FMMKernel_wgsl implements IFMMKernel {
         });
         this.device.queue.writeBuffer(this.nodeOffsetBufferGPU, 0, tree.nodeStartOffset);
         this.device.queue.writeBuffer(this.nodeOffsetBufferGPU, tree.nodeStartOffset.byteLength, tree.nodeEndOffset);
+
+        this.boxFullIndexGPU = this.device.createBuffer({
+            size: tree.boxIndexFull.byteLength,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        });
+        this.device.queue.writeBuffer(this.boxFullIndexGPU, 0, tree.boxIndexFull);
 
         this.uniformBufferMaxMember = Math.max(...Object.keys(uniform_structs).map(x => Object.keys(uniform_structs[x]).length))
         this.uniformBufferGPU = this.device.createBuffer({
@@ -146,8 +164,8 @@ export class FMMKernel_wgsl implements IFMMKernel {
         for (let n = 0; n < core.numExpansions; n++) {
             for (let m = -n; m <= n; m++) {
                 let i = n * n + n + m;
-                i2nm[i * 4 + 0] = n;
-                i2nm[i * 4 + 1] = m;
+                i2nm[i * 2 + 0] = n;
+                i2nm[i * 2 + 1] = m;
             }
         }
         this.device.queue.writeBuffer(this.i2nmBufferGPU, 0, i2nm);
@@ -162,6 +180,14 @@ export class FMMKernel_wgsl implements IFMMKernel {
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         });
         this.device.queue.writeBuffer(this.factorialGPU, 0, factorial);
+
+        let maxBoxNodeCount = 0;
+        core.tree.nodeStartOffset.forEach((start, i) => {
+            const end = core.tree.nodeEndOffset[i];
+            const count = end - start + 1;
+            if (maxBoxNodeCount < count) { maxBoxNodeCount = count; }
+        })
+        this.maxBoxNodeCount = maxBoxNodeCount;
     }
 
     setInteractionList() {
@@ -174,8 +200,6 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.interactionListBuffer[offset] = core.interactionCounts[i];
             this.interactionListBuffer.set(core.interactionList[i], offset + 1);
         }
-        console.log(this.interactionListBuffer)
-
         this.device.queue.writeBuffer(this.interactionListGPU, 0, this.interactionListBuffer);
     }
     async p2p() {
@@ -184,7 +208,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[tree.maxLevel - 1]; // tree.numBoxIndexLeaf
-        const offset = tree.levelOffset[tree.maxLevel - 1]; // should be 0
+        // const offset = tree.levelOffset[tree.maxLevel - 1]; // should be 0
         this.setInteractionList();
         let workgroupCount = Math.ceil(tree.nodeCount / this.maxThreadPerGroup);
         this.UniformTransfer(
@@ -194,10 +218,14 @@ export class FMMKernel_wgsl implements IFMMKernel {
             }
             , uniforms_p2p);
         await this.RunCompute("p2p",
-            [this.uniformBufferGPU, this.nodeBufferGPU, this.nodeOffsetBufferGPU, this.interactionListGPU, this.accelBufferGPU],
+            [this.uniformBufferGPU,
+            this.nodeBufferGPU,
+            this.nodeOffsetBufferGPU,
+            this.interactionListGPU,
+            this.accelBufferGPU],
             workgroupCount,
             waitDone,
-            this.accelBufferGPU, // debug  to Read
+            // this.accelBufferGPU, // debug  to Read
         );
         this.debug_info.push({ step: "P2P", time: performance.now() - time });
 
@@ -205,14 +233,38 @@ export class FMMKernel_wgsl implements IFMMKernel {
     }
 
     async p2m() {
+        const waitDone = this.debug;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[tree.maxLevel - 1]; //non-empty
-        const offset = tree.levelOffset[tree.maxLevel - 1]; // should be 0
-        for (let i = 0; i < boxCount; i++) {
+        // const offset = tree.levelOffset[tree.maxLevel - 1]; // should be 0
+        const workgroupCount = boxCount;
+        this.UniformTransfer(
+            {
+                boxMinX: tree.boxMinX,
+                boxMinY: tree.boxMinY,
+                boxMinZ: tree.boxMinZ,
+                boxSize: tree.rootBoxSize / (2 << (tree.maxLevel - 1)),
+                boxCount: boxCount,
+                maxBoxNodeCount: this.maxBoxNodeCount,
+            }
+            , uniforms_p2m);
+        await this.RunCompute("p2m",
+            [this.uniformBufferGPU,
+            this.nodeBufferGPU,
+            this.nodeOffsetBufferGPU,
+            this.boxFullIndexGPU,
+            this.factorialGPU,
+            this.i2nmBufferGPU,
+            this.mnmBufferGPU],
+            workgroupCount,
+            waitDone,
+            this.mnmBufferGPU, // debug  to Read
+        );
+        await this.GetReadBufferContent(this.Mnm); console.log("Mnm",this.Mnm);// debug
+        debugger;
 
-        }
         this.debug_info.push({ step: "P2M", time: performance.now() - time });
     }
     async m2m(numLevel: number) {
@@ -266,19 +318,21 @@ export class FMMKernel_wgsl implements IFMMKernel {
         }
         this.debug_info.push({ step: `L2P`, time: performance.now() - time });
 
-        await this.GetReadBufferContent(this.accelBuffer);
+        //await this.GetReadBufferContent(this.accelBuffer);
     }
 
     Release() { }
 
     InitShaders() {
+        const core = this.core;
         const contants = {
             maxThreadPerGroup: { v: this.maxThreadPerGroup, t: u32 },
             PI: { v: Math.PI, t: f32 },
             eps: { v: 1e-6, t: f32 },
             maxM2LInteraction: { v: maxM2LInteraction, t: u32 },
-            numExpansions: { v: this.core.numExpansions, t: u32 },
-            MnmSize: { v: this.core.MnmSize, t: u32 },
+            numExpansions: { v: core.numExpansions, t: u32 },
+            MnmSize: { v: core.MnmSize, t: u32 },
+            PnmSize: { v: core.numExpansions * (core.numExpansions + 1) / 2, t: u32 },
         };
 
         const contants_wsgl = Object.keys(contants)
@@ -290,7 +344,10 @@ export class FMMKernel_wgsl implements IFMMKernel {
         const includeSrc = {
             contants: contants_wsgl,
             CalcALP_R: wgsl_CalcALP_R,
+            CalcALP: wgsl_CalcALP,
             GetIndex3D: wgsl_GetIndex3D,
+            cart2sph: wgsl_cart2sph,
+            getNode: wgsl_getNode,
         };
 
         const uniform_names = Object.keys(uniform_structs);
@@ -412,7 +469,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
         await this.readBufferGPU.mapAsync(GPUMapMode.READ);
         const handle = this.readBufferGPU.getMappedRange();
         let temp = new Float32Array(handle);
-        dst.set(temp);
+        dst.set(temp.subarray(0, Math.min(dst.length, temp.length)));
         this.readBufferGPU.unmap();
     }
 

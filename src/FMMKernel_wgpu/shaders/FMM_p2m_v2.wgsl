@@ -1,8 +1,10 @@
+// v2误差似乎更大
+
 #include contants;
 
 #include uniforms_p2m_def;
 
-#include CalcALP;
+#include CalcALP_R;
 #include GetIndex3D;
 #include cart2sph;
 
@@ -23,24 +25,20 @@ var<workgroup> rho: f32;
 var<workgroup> alpha: f32;
 var<workgroup> beta: f32;
 var<workgroup> node: vec4f;
-var<workgroup> Pnm: array<f32, PnmSize>;
 
-// fn CalcALP_R_callback(n_: i32,
-//                       m_: i32,
-//                       m_abs: i32,
-//                       r_n: f32,
-//                       p: f32,
-//                       p_d: f32){
-//     if(n_ != n || m_ != m) { return; }
-//     let C = node.w * sqrt(factorial[n - m] / factorial[n + m]) * p * r_n;
-//     let angle = -f32(m) * beta;
-//     let re = C * cos(angle); 
-//     let im = C * sin(angle);
-//     M += vec2f(re, im);
-// }
-
-
-
+fn CalcALP_R_callback(n_: i32,
+                      m_: i32,
+                      m_abs: i32,
+                      r_n: f32,
+                      p: f32,
+                      p_d: f32){
+    if(n_ != n || m_ != m) { return; }
+    let C = node.w * sqrt(factorial[n - m_abs] / factorial[n + m_abs]) * p * r_n;
+    let angle = -f32(m) * beta;
+    let re = C * cos(angle); 
+    let im = C * sin(angle);
+    M += vec2f(re, im);
+}
 
 // one group for one box, with
 // could use 共轭, but not use. keep it same with others.
@@ -64,30 +62,12 @@ fn p2m(@builtin(local_invocation_id) local_id : vec3<u32>,
     n = i2nm[i * 2];
     m = i2nm[i * 2 + 1];
 
-    for(var ii: u32 = 0; ii < maxBoxNodeCount; ii++){
-        let node_id = start + ii;
-        if(node_id <= end){
-            node = getNode(node_id);
-            let dist = node.xyz - boxCenter;
-            let t = cart2sph(dist);
-            rho = t.x; alpha = t.y; beta = t.z;
-            CalcALP(numExpansions, cos(alpha));
-        }
-        workgroupBarrier();
-        if(node_id <= end){
-            let m_abs = abs(m);
-            let i = n * (n + 1) / 2 + m_abs ;
-            let C = node.w * sqrt(factorial[n - m_abs] / factorial[n + m_abs]) * Pnm[i];
-            let angle = -f32(m) * beta;
-            var re = C * cos(angle); var im = C * sin(angle);
-            for (var iii = 0; iii < n; iii++) {
-                re *= rho;
-                im *= rho;
-            }
-            M += vec2f(re, im);
-
-        }
-        workgroupBarrier();
+    for(var node_id: u32 = start; node_id <= end; node_id++){
+        node = getNode(node_id);
+        let dist = node.xyz - boxCenter;
+        let t = cart2sph(dist);
+        rho = t.x; alpha = t.y; beta = t.z;
+        CalcALP_R(numExpansions, alpha, rho);
     }
 
     let boxMnmOffset = box_id * MnmSize * 2;

@@ -8,15 +8,7 @@
 @group(0) @binding(3) var<storage, read> interactionList: array<u32>;
 @group(0) @binding(4) var<storage, read_write> accelBuffer: array<f32>;
 
-
-fn getNode(i : u32) -> vec4f{
-    return vec4f(
-        nodeBuffer[i * 4],
-        nodeBuffer[i * 4 + 1],
-        nodeBuffer[i * 4 + 2],
-        nodeBuffer[i * 4 + 3]
-    );
-}
+#include getNode;
 
 @compute @workgroup_size(maxThreadPerGroup) 
 fn p2p(@builtin(global_invocation_id) id : vec3<u32>) {
