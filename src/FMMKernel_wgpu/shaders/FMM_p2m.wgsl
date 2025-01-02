@@ -25,22 +25,6 @@ var<workgroup> beta: f32;
 var<workgroup> node: vec4f;
 var<workgroup> Pnm: array<f32, PnmSize>;
 
-// fn CalcALP_R_callback(n_: i32,
-//                       m_: i32,
-//                       m_abs: i32,
-//                       r_n: f32,
-//                       p: f32,
-//                       p_d: f32){
-//     if(n_ != n || m_ != m) { return; }
-//     let C = node.w * sqrt(factorial[n - m] / factorial[n + m]) * p * r_n;
-//     let angle = -f32(m) * beta;
-//     let re = C * cos(angle); 
-//     let im = C * sin(angle);
-//     M += vec2f(re, im);
-// }
-
-
-
 
 // one group for one box, with
 // could use 共轭, but not use. keep it same with others.
