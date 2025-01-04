@@ -33,8 +33,17 @@ const uniforms_p2m = {
     maxBoxNodeCount: u32,
 };
 
+const uniforms_m2m = {
+    boxMinX: f32,
+    boxMinY: f32,
+    boxMinZ: f32,
+    dst_boxSize: f32,
+    offset: u32,
+    offset_lower: u32,
+};
+
 const uniform_structs =
-    { uniforms_p2p, uniforms_p2m };
+    { uniforms_p2p, uniforms_p2m, uniforms_m2m };
 
 export class FMMKernel_wgsl implements IFMMKernel {
     core: FMMSolver;
@@ -58,6 +67,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
     /** [...tree.nodeStartOffset, ...tree.nodeEndOffset] */
     nodeOffsetBufferGPU: GPUBuffer;
     boxFullIndexGPU: GPUBuffer;
+    boxIndexMaskGPU: GPUBuffer;
 
     maxBoxNodeCount: number;
 
@@ -119,6 +129,11 @@ export class FMMKernel_wgsl implements IFMMKernel {
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
         this.device.queue.writeBuffer(this.boxFullIndexGPU, 0, tree.boxIndexFull);
+
+        this.boxIndexMaskGPU = this.device.createBuffer({
+            size: tree.numBoxIndexFull * SIZEOF_32,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        });
 
         this.uniformBufferMaxMember = Math.max(...Object.keys(uniform_structs).map(x => Object.keys(uniform_structs[x]).length))
         this.uniformBufferGPU = this.device.createBuffer({
@@ -262,22 +277,47 @@ export class FMMKernel_wgsl implements IFMMKernel {
             waitDone,
             this.mnmBufferGPU, // debug  to Read
         );
-        await this.GetReadBufferContent(this.Mnm); console.log("Mnm",this.Mnm);// debug
-        debugger;
+        //await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
 
         this.debug_info.push({ step: "P2M", time: performance.now() - time });
     }
     async m2m(numLevel: number) {
+        const waitDone = this.debug;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[numLevel]; //non-empty
-        const offset = tree.levelOffset[numLevel];
         const src_mask = tree.boxIndexMaskBuffers[numLevel + 1];
-        for (let i = 0; i < boxCount; i++) {
 
+        this.device.queue.writeBuffer(this.boxIndexMaskGPU, 0, src_mask);
 
-        }
+        const workgroupCount = boxCount;
+        this.UniformTransfer(
+            {
+                boxMinX: tree.boxMinX,
+                boxMinY: tree.boxMinY,
+                boxMinZ: tree.boxMinZ,
+                dst_boxSize: tree.rootBoxSize / (2 << (numLevel)),
+                offset: tree.levelOffset[numLevel],
+                offset_lower: tree.levelOffset[numLevel + 1],
+            },
+            uniforms_m2m);
+
+        await this.RunCompute("m2m",
+            [this.uniformBufferGPU,
+            this.boxFullIndexGPU,
+            this.boxIndexMaskGPU,
+            this.factorialGPU,
+            this.i2nmBufferGPU,
+            this.mnmBufferGPU],
+            workgroupCount,
+            waitDone,
+            this.mnmBufferGPU, // debug  to Read
+        );
+        await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
+
+        debugger;
+
         this.debug_info.push({ step: `M2M@${numLevel + 1}->${numLevel}`, time: performance.now() - time });
     }
     async m2l(numLevel: number) {
@@ -333,6 +373,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             numExpansions: { v: core.numExpansions, t: u32 },
             MnmSize: { v: core.MnmSize, t: u32 },
             PnmSize: { v: core.numExpansions * (core.numExpansions + 1) / 2, t: u32 },
+            PnmSize2: { v: core.numExpansions * 2 * (core.numExpansions * 2 + 1) / 2, t: u32 },
         };
 
         const contants_wsgl = Object.keys(contants)
