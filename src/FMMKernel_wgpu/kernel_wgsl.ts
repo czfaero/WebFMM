@@ -41,9 +41,13 @@ const uniforms_m2m = {
     offset: u32,
     offset_lower: u32,
 };
+const uniforms_m2l = {
+    boxSize: f32,
+    offset: u32,
+};
 
 const uniform_structs =
-    { uniforms_p2p, uniforms_p2m, uniforms_m2m };
+    { uniforms_p2p, uniforms_p2m, uniforms_m2m, uniforms_m2l };
 
 export class FMMKernel_wgsl implements IFMMKernel {
     core: FMMSolver;
@@ -277,7 +281,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             waitDone,
             this.mnmBufferGPU, // debug  to Read
         );
-        //await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
+        await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
 
         this.debug_info.push({ step: "P2M", time: performance.now() - time });
     }
@@ -316,19 +320,36 @@ export class FMMKernel_wgsl implements IFMMKernel {
         );
         await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
 
-        debugger;
-
         this.debug_info.push({ step: `M2M@${numLevel + 1}->${numLevel}`, time: performance.now() - time });
     }
     async m2l(numLevel: number) {
+        const waitDone = this.debug;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[numLevel]; //non-empty
-        const offset = tree.levelOffset[numLevel];
-        for (let i = 0; i < boxCount; i++) {
+        const workgroupCount = boxCount;
+        this.UniformTransfer(
+            {
+                boxSize: tree.rootBoxSize / (2 << (numLevel)),
+                offset: tree.levelOffset[numLevel],
+            },
+            uniforms_m2l);
+        this.setInteractionList();
+        await this.RunCompute("m2l",
+            [this.uniformBufferGPU,
+            this.boxFullIndexGPU,
+            this.factorialGPU,
+            this.i2nmBufferGPU,
+            this.interactionListGPU,
+            this.mnmBufferGPU,
+            this.lnmBufferGPU],
+            workgroupCount,
+            waitDone,
+            this.lnmBufferGPU, // debug  to Read
+        );
+        await this.GetReadBufferContent(this.Lnm); console.log("Lnm", this.Lnm);// debug
 
-        }
         this.debug_info.push({
             step: `M2L@${numLevel}`,
             time: performance.now() - time
