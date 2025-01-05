@@ -51,16 +51,18 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
         let src_index = dst_index * 8 + b;
         let src_box_id = boxIndexMask[src_index];
         if (src_box_id != -1) {
-            let src_index3D = GetIndex3D(src_index);
-            let src_boxCenter = boxMin + (vec3f(src_index3D) + vec3f(0.5, 0.5, 0.5)) * src_boxSize;
-            let dist = src_boxCenter - dst_boxCenter;
-            let sph = cart2sph(dist);
-            rho = sph.x; alpha = sph.y; beta = sph.z;
-            CalcALP(2 * numExpansions, cos(alpha));
-            var v = 1.0;
-            for (var ii: u32 = 0; ii < numExpansions; ii++) {
-                rho_n[ii] = v;
-                v = v * rho;
+            if(i == 0){
+                let src_index3D = GetIndex3D(src_index);
+                let src_boxCenter = boxMin + (vec3f(src_index3D) + vec3f(0.5, 0.5, 0.5)) * src_boxSize;
+                let dist = src_boxCenter - dst_boxCenter;
+                let sph = cart2sph(dist);
+                rho = sph.x; alpha = sph.y; beta = sph.z;
+                CalcALP(2 * numExpansions, cos(alpha));
+                var v = 1.0;
+                for (var ii: u32 = 0; ii < numExpansions; ii++) {
+                    rho_n[ii] = v;
+                    v = v * rho;
+                }
             }
         }
         workgroupBarrier();

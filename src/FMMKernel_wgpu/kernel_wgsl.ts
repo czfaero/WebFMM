@@ -45,9 +45,16 @@ const uniforms_m2l = {
     boxSize: f32,
     offset: u32,
 };
-
+const uniforms_l2l = {
+    boxMinX: f32,
+    boxMinY: f32,
+    boxMinZ: f32,
+    src_boxSize: f32,
+    offset: u32,
+    offset_lower: u32,
+};
 const uniform_structs =
-    { uniforms_p2p, uniforms_p2m, uniforms_m2m, uniforms_m2l };
+    { uniforms_p2p, uniforms_p2m, uniforms_m2m, uniforms_m2l, uniforms_l2l };
 
 export class FMMKernel_wgsl implements IFMMKernel {
     core: FMMSolver;
@@ -356,16 +363,36 @@ export class FMMKernel_wgsl implements IFMMKernel {
         });
     }
     async l2l(numLevel: number) {
+        const waitDone = this.debug;
         const time = performance.now();
-
         const core = this.core;
         const tree = core.tree;
-        const boxCount = tree.levelBoxCounts[numLevel]; //non-empty
-        const offset = tree.levelOffset[numLevel];
-        const dst_mask = tree.boxIndexMaskBuffers[numLevel + 1];
-        for (let i = 0; i < boxCount; i++) {
+        const boxCount = tree.levelBoxCounts[numLevel + 1]; //non-empty
+        const src_mask = tree.boxIndexMaskBuffers[numLevel];
+        this.device.queue.writeBuffer(this.boxIndexMaskGPU, 0, src_mask);
+        const workgroupCount = boxCount;
+        this.UniformTransfer(
+            {
+                boxMinX: tree.boxMinX,
+                boxMinY: tree.boxMinY,
+                boxMinZ: tree.boxMinZ,
+                src_boxSize: tree.rootBoxSize / (2 << (numLevel)),
+                offset: tree.levelOffset[numLevel],
+                offset_lower: tree.levelOffset[numLevel + 1],
+            },
+            uniforms_l2l);
 
-        }
+        await this.RunCompute("l2l",
+            [this.uniformBufferGPU,
+            this.boxFullIndexGPU,
+            this.boxIndexMaskGPU,
+            this.factorialGPU,
+            this.i2nmBufferGPU,
+            this.lnmBufferGPU],
+            workgroupCount,
+            waitDone,
+            this.lnmBufferGPU, // debug  to Read
+        );
         this.debug_info.push({ step: `L2L@${numLevel}->${numLevel + 1}`, time: performance.now() - time });
 
     }
