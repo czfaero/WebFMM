@@ -15,7 +15,6 @@ fn p2p(@builtin(global_invocation_id) id : vec3<u32>) {
 // global_invocation_id is equal to workgroup_id * workgroup_size + local_invocation_id.
 
 #include uniforms_p2p_expand;
-    var debug_temp:f32=0;
     
     let dst_node_id = id.x;
     if(dst_node_id >= nodeCount){return;}
@@ -44,8 +43,6 @@ fn p2p(@builtin(global_invocation_id) id : vec3<u32>) {
             let r = src_node.w * dst_node.w * invDistCube * dist;
             accel += r;
         }
-        debug_temp+=f32(src_end-src_start+1);
-
     }
 
     accelBuffer[dst_node_id * 3] = accel.x;
