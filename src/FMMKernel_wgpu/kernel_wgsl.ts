@@ -53,8 +53,24 @@ const uniforms_l2l = {
     offset: u32,
     offset_lower: u32,
 };
+
+const uniforms_l2p = {
+    nodeCount: u32,
+    boxCount: u32,
+    boxMinX: f32,
+    boxMinY: f32,
+    boxMinZ: f32,
+    boxSize: f32,
+};
 const uniform_structs =
-    { uniforms_p2p, uniforms_p2m, uniforms_m2m, uniforms_m2l, uniforms_l2l };
+{
+    uniforms_p2p,
+    uniforms_p2m,
+    uniforms_m2m,
+    uniforms_m2l,
+    uniforms_l2l,
+    uniforms_l2p
+};
 
 export class FMMKernel_wgsl implements IFMMKernel {
     core: FMMSolver;
@@ -254,8 +270,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             // this.accelBufferGPU, // debug  to Read
         );
         this.debug_info.push({ step: "P2P", time: performance.now() - time });
-
-        await this.GetReadBufferContent(this.accelBuffer);//dbug
+        //await this.GetReadBufferContent(this.accelBuffer);//dbug
     }
 
     async p2m() {
@@ -288,7 +303,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             waitDone,
             this.mnmBufferGPU, // debug  to Read
         );
-        await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
+        //await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
 
         this.debug_info.push({ step: "P2M", time: performance.now() - time });
     }
@@ -325,7 +340,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             waitDone,
             this.mnmBufferGPU, // debug  to Read
         );
-        await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
+        //await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
 
         this.debug_info.push({ step: `M2M@${numLevel + 1}->${numLevel}`, time: performance.now() - time });
     }
@@ -393,20 +408,42 @@ export class FMMKernel_wgsl implements IFMMKernel {
             waitDone,
             this.lnmBufferGPU, // debug  to Read
         );
+        // await this.GetReadBufferContent(this.Lnm); console.log("Lnm", this.Lnm);
         this.debug_info.push({ step: `L2L@${numLevel}->${numLevel + 1}`, time: performance.now() - time });
 
     }
     async l2p() {
+        const waitDone = this.debug;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
         const boxCount = tree.levelBoxCounts[tree.maxLevel - 1]; //non-empty
-        const offset = tree.levelOffset[tree.maxLevel - 1]; // should be 0
-        for (let i = 0; i < boxCount; i++) {
-        }
+        let workgroupCount = Math.ceil(tree.nodeCount / this.maxThreadPerGroup);
+        this.UniformTransfer(
+            {
+                nodeCount: tree.nodeCount,
+                boxCount: boxCount,
+                boxMinX: tree.boxMinX,
+                boxMinY: tree.boxMinY,
+                boxMinZ: tree.boxMinZ,
+                boxSize: tree.rootBoxSize / (2 << (tree.maxLevel - 1)),
+            }
+            , uniforms_l2p);
+        await this.RunCompute("l2p",
+            [this.uniformBufferGPU,
+            this.nodeBufferGPU,
+            this.nodeOffsetBufferGPU,
+            this.boxFullIndexGPU,
+            this.factorialGPU,
+            this.lnmBufferGPU,
+            this.accelBufferGPU],
+            workgroupCount,
+            waitDone,
+            this.accelBufferGPU,
+        );
         this.debug_info.push({ step: `L2P`, time: performance.now() - time });
 
-        //await this.GetReadBufferContent(this.accelBuffer);
+        await this.GetReadBufferContent(this.accelBuffer);
     }
 
     Release() { }
