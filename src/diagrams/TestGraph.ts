@@ -1,4 +1,4 @@
-const size_a = 25, size_b = 25, size_c = 25;
+const size_a = 50, size_b = 50, size_c = 40;
 const interval = 0.5;
 const count = size_a * size_b * size_c;
 export const GetNodes = function () {
