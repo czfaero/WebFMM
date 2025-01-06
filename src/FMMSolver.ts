@@ -154,8 +154,6 @@ export class FMMSolver implements INBodySolver {
 
         await this.kernel.p2m();
 
-
-        ;this.dataReady = true;return;//debug shortcut
         for (let numLevel = tree.maxLevel - 2; numLevel >= 1; numLevel--) {
             await this.kernel.m2m(numLevel);
         }
@@ -175,8 +173,6 @@ export class FMMSolver implements INBodySolver {
 
         this.debug_info.push({ time: performance.now() - time });
         this.debug_info.push(this.kernel.debug_info);
-
-
     }
 
     numExpansions: number;
