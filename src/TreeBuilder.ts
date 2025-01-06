@@ -51,8 +51,7 @@ export class TreeBuilder {
     setOptimumLevel() {
         // 按照点的数量区间定级别
         const level_switch = [1e5, 7e5, 7e6, 5e7, 3e8, 2e9]; // gpu-fmm
-        //const level_switch = [1e4, 1e5, 1e6, 1e7, 1e8, 1e9]; 
-
+        
         this.maxLevel = 2;
         for (const level of level_switch) {
             if (this.nodeCount >= level) {
