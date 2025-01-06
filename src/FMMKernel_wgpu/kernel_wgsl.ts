@@ -121,7 +121,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
     constructor(core: FMMSolver) {
         this.core = core;
         this.debug_info = [];
-        this.debug = true;
+        this.debug = false;
     }
     async Init() {
         const core = this.core;
@@ -301,7 +301,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.mnmBufferGPU],
             workgroupCount,
             waitDone,
-            this.mnmBufferGPU, // debug  to Read
+            // this.mnmBufferGPU, // debug  to Read
         );
         //await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
 
@@ -338,7 +338,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.mnmBufferGPU],
             workgroupCount,
             waitDone,
-            this.mnmBufferGPU, // debug  to Read
+            // this.mnmBufferGPU, // debug  to Read
         );
         //await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
 
@@ -368,9 +368,9 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.lnmBufferGPU],
             workgroupCount,
             waitDone,
-            this.lnmBufferGPU, // debug  to Read
+            // this.lnmBufferGPU, // debug  to Read
         );
-        await this.GetReadBufferContent(this.Lnm); console.log("Lnm", this.Lnm);// debug
+        // await this.GetReadBufferContent(this.Lnm); console.log("Lnm", this.Lnm);// debug
 
         this.debug_info.push({
             step: `M2L@${numLevel}`,
@@ -406,7 +406,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.lnmBufferGPU],
             workgroupCount,
             waitDone,
-            this.lnmBufferGPU, // debug  to Read
+            // this.lnmBufferGPU, // debug  to Read
         );
         // await this.GetReadBufferContent(this.Lnm); console.log("Lnm", this.Lnm);
         this.debug_info.push({ step: `L2L@${numLevel}->${numLevel + 1}`, time: performance.now() - time });
@@ -439,7 +439,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.accelBufferGPU],
             workgroupCount,
             waitDone,
-            this.accelBufferGPU,
+            this.accelBufferGPU, // the result
         );
         this.debug_info.push({ step: `L2P`, time: performance.now() - time });
 
