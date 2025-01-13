@@ -189,7 +189,7 @@ export class FMMSolver implements INBodySolver {
             "ts": FMMKernel_ts
         }[kernelName];
         if (!TKernel) throw "Unknown Kernel: " + kernelName;
-        console.log("Create with kernel: " + kernelName);
+
         this.kernel = new TKernel(this);
         this.tree = tree;
 
@@ -203,6 +203,7 @@ export class FMMSolver implements INBodySolver {
 
         this.interactionCounts = new Int32Array(tree.numBoxIndexLeaf);
         this.interactionList = new Array(tree.numBoxIndexLeaf).fill(0).map(_ => new Int32Array(maxM2LInteraction));
+        console.log("Create with kernel: " + kernelName, "numExpansions: ", this.numExpansions);
     }
 
     isDataReady() {

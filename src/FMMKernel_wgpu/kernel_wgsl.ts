@@ -509,7 +509,6 @@ export class FMMKernel_wgsl implements IFMMKernel {
                 this.shaders[key] = shader;
             });
         const nameList = "p2p p2m m2m m2l l2l l2p".split(" ");
-        debugger;
         for (const n of nameList) {
             this.shaders[n] = this.device.createShaderModule({
                 code: this.shaders[n],
