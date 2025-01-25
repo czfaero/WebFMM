@@ -3,13 +3,14 @@ import { DirectSolver } from './DirectSolver';
 import { TreeBuilder } from './TreeBuilder';
 import { INBodySolver } from './INBodySolver';
 
-const k = 1;// spring force coef
+const k = 5;// spring force coef
 const k_distance = 0.1;// distance when spring 0 force
-const delta = 0.01;//F = accel * delta; 
+const delta = 0.04;//F = accel * delta; 
+const maxAccel = 15;
 var solver: INBodySolver;
 var next = false;
-const stepMode = 1;
-const maxIter = 1000;
+const stepMode = 0;
+const maxIter = 100;
 const msg = document.querySelector("#msg") as HTMLSpanElement;
 
 let tree: TreeBuilder;
@@ -93,6 +94,8 @@ export function DataUpdate(
             const l_ = l - k_distance;
             const normalized = { x: dist.x / l, y: dist.y / l, z: dist.z / l };
             const dist2 = { x: normalized.x * l_, y: normalized.y * l_, z: normalized.z * l_ }
+            if (isNaN(dist2.x)) { debugger; }
+            if (isNaN(accelBuffer[i1 * 3])) { debugger; }
             accelBuffer[i1 * 3] += dist2.x * k;
             accelBuffer[i1 * 3 + 1] += dist2.y * k;
             accelBuffer[i1 * 3 + 2] += dist2.z * k;
@@ -102,9 +105,19 @@ export function DataUpdate(
         }
 
         for (let i = 0; i < nodeBuffer.length / 4; i++) {
-            nodeBuffer[i * 4 + 0] += accelBuffer[i * 3 + 0] * delta;
-            nodeBuffer[i * 4 + 1] += accelBuffer[i * 3 + 1] * delta;
-            nodeBuffer[i * 4 + 2] += accelBuffer[i * 3 + 2] * delta;
+            let x = accelBuffer[i * 3 + 0];
+            let y = accelBuffer[i * 3 + 1];
+            let z = accelBuffer[i * 3 + 2];
+            let l = Math.sqrt(x * x + y * y + z * z);
+            if (l > maxAccel) {
+                x = x / l * maxAccel;
+                y = y / l * maxAccel;
+                z = z / l * maxAccel;
+            }
+
+            nodeBuffer[i * 4 + 0] += x * delta;
+            nodeBuffer[i * 4 + 1] += y * delta;
+            nodeBuffer[i * 4 + 2] += z * delta;
         }
 
         device.queue.writeBuffer(linkBufferGPU, 0, linkBuffer);
@@ -120,10 +133,9 @@ export function DataUpdate(
             if (iterCount > maxIter) { solver = null; return; }
             tree = new TreeBuilder(nodeBuffer, linkBuffer, colorBuffer);
 
-            solver = new DirectSolver(tree);
-            //solver = new FMMSolver(tree);
+            // solver = new DirectSolver(tree);
+            solver = new FMMSolver(tree, "wgsl");
             solver.main();
-            debugger;
             iterCount++;
         }
     }

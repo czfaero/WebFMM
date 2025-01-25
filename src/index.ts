@@ -1,7 +1,8 @@
 import { NodeLinkRenderer } from './NodeLinkRenderer';
 
 //import { GetNodes, GetLinks } from './diagrams/BinaryLoader'
-import { GetNodes, GetLinks, GetNodeColors } from './diagrams/TestGraph'
+//import { GetNodes, GetLinks, GetNodeColors } from './diagrams/TestGraph'
+import { GetNodes, GetLinks, GetNodeColors } from './diagrams/Random'
 ////import { GetNodes, GetLinks,GetNodeColors } from './diagrams/MatrixMarketLoader'
 
 import { FMMSolver } from './FMMSolver';
@@ -46,8 +47,8 @@ async function main() {
     // try {
     //     await tester.Test(solver2);
     // } catch (e) { throw e; }
-    Data_debug_AddWatch(1, 15);
-    Data_debug_AddWatch(1, 200);
+    //Data_debug_AddWatch(1, 15);
+    //Data_debug_AddWatch(1, 200);
     DataStart();
     const renderer = new NodeLinkRenderer();
     renderer.setData(nodes, links, colors);

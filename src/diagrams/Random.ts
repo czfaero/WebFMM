@@ -1,4 +1,4 @@
-const range = 25;
+const range = 5;
 const nodeCount = 100000;
 const seed = 333;
 
@@ -29,7 +29,7 @@ export const GetNodes = function () {
             yield rng.NextFloat() * range - range / 2;
             yield rng.NextFloat() * range - range / 2;
             yield rng.NextFloat() * range - range / 2;
-            yield 1;
+            yield 0.5;
         }
     })();
     const nodes = new Float32Array(iterable);
@@ -46,7 +46,7 @@ export const GetLinks = function () {
             let end = i + len;
             yield pos;
             yield i + 1;
-            for (; i < end-1 && i < nodeCount; i++) {
+            for (; i < end - 1 && i < nodeCount - 1; i++) {
                 yield i + 1;
                 yield i + 2;
             }
