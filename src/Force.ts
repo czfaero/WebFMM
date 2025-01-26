@@ -156,7 +156,10 @@ function* debug_Run(tree) {
     const accelBuffer3 = solver.getAccelBuffer();
     console.log("FMM GPU", solver.debug_info, accelBuffer3);
     yield;
+    const E = debug_getError(accelBuffer1, accelBuffer3);
+    console.log("E", E);
     debugger;
+
 
     solver = new FMMSolver(tree);
     solver.debug_watch_box_id_pairs = debug_watch_box_id_pairs;
@@ -176,6 +179,17 @@ function* debug_Run(tree) {
     yield;
 }
 
+function debug_getError(baseBuffer, testBuffer) {
+    let upper = 0;
+    let under = 0;
+    for (let i = 0; i < baseBuffer.length; i++) {
+        const bv = baseBuffer[i], tv = testBuffer[i];
+        const e = bv - tv;
+        upper += e * e;
+        under += bv * bv;
+    }
+    return Math.sqrt(upper / under)
+}
 
 function RecordVideo() {
     const canvas = document.querySelector("canvas") as HTMLCanvasElement;

@@ -47,7 +47,7 @@ async function main() {
     // try {
     //     await tester.Test(solver2);
     // } catch (e) { throw e; }
-    //Data_debug_AddWatch(1, 15);
+    Data_debug_AddWatch(1, 15);
     //Data_debug_AddWatch(1, 200);
     DataStart();
     const renderer = new NodeLinkRenderer();
