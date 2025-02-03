@@ -134,8 +134,8 @@ export class TreeBuilder {
             tempColor.set(this.colorBuffer.subarray(offset3, offset3 + 3), i * 3);
 
             // debug: viusalize box 
-            //tempColor.set(sortValue[i] == 7 ? [1, 1, 1] : [0, 0, 0], i * 3);
-            tempColor.set([1, 1, 0], i * 3);
+            // tempColor.set(sortValue[i] == 7 ? [1, 1, 1] : [0, 0, 0], i * 3);
+            // tempColor.set([1, 1, 0], i * 3);
 
 
             inverseSortIndex[sortIndex[i]] = i;

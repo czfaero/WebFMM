@@ -37,7 +37,7 @@ export function DataStart() {
     //solver = new FMMSolver(nodeBuffer, "wgpu");
     // solver = new DirectSolver(nodeBuffer);
     // solver.main();
-
+    RecordVideo();
 }
 
 function GetPoint(i: number, buffer: Float32Array) {
@@ -177,6 +177,7 @@ function* debug_Run(tree) {
     const accelBuffer4 = solver.getAccelBuffer();
     console.log("Direct CPU", solver.debug_info, accelBuffer4);
     yield;
+    throw "pause";
 }
 
 function debug_getError(baseBuffer, testBuffer) {
@@ -194,11 +195,14 @@ function debug_getError(baseBuffer, testBuffer) {
 function RecordVideo() {
     const canvas = document.querySelector("canvas") as HTMLCanvasElement;
     // Optional frames per second argument.
-    const stream = canvas.captureStream(25);
+    const stream = canvas.captureStream(30);
     const recordedChunks = [];
 
     console.log(stream);
-    const options = { mimeType: "video/webm; codecs=vp9" };
+    const options = { mimeType: 
+        //"video/webm; codecs=vp9" 
+        "video/mp4", videoBitsPerSecond: 2500000,
+    };
     const mediaRecorder = new MediaRecorder(stream, options);
 
     mediaRecorder.ondataavailable = handleDataAvailable;
