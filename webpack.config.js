@@ -31,7 +31,7 @@ module.exports = {
     plugins: [
         new HtmlWebpackPlugin({
             template: './dist/index.html',
-            filename: 'index.html' // 输出到doc文件夹
+            filename: 'index.html' 
         })
     ],
     devServer: {
