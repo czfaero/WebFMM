@@ -16,6 +16,13 @@ export class NodeLinkRenderer {
     };
 
     dataUpdate: any;
+    log_callback: any;
+
+    Log(str: string) {
+        if (this.log_callback) {
+            this.log_callback(str);
+        }
+    }
 
     setDataUpdate(func: any) {
         this.dataUpdate = func;
@@ -340,13 +347,10 @@ export class NodeLinkRenderer {
             }
             const fps = 1 / deltaTime;
             if (fps < 0.1) {
-               // debugger; // too slow
+                // debugger; // too slow
             }
-            logger.innerHTML = `FPS:${(fps).toFixed(1)}`;
+            _.Log(`FPS: ${(fps).toFixed(1)}`);
         }
-
-        const logger = document.createElement('div');
-        document.body.append(logger);
 
         function Update(time: DOMHighResTimeStamp) {
             UpdateView(time);

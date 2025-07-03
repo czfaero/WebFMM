@@ -13,6 +13,10 @@ module.exports = {
             {
                 test: /\.wgsl?$/,
                 use: 'raw-loader',
+            },
+            {
+                test: /\.css$/,
+                use: ['style-loader', 'css-loader']
             }
         ],
     },

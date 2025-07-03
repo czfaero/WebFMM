@@ -3,12 +3,101 @@
 
 <head>
     <title>WebGPU FMM</title>
+    <style>
+        .canvas_container {
+            margin: auto;
+            margin-top: 0.5em;
+            text-align: center;
+        }
+
+        canvas {
+            border: #eeeeee solid 1px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        #select-language {
+            position: absolute;
+            right: 2px;
+            top: 2px;
+        }
+
+        .menu {
+            border-radius: 0.5em;
+            background: #eeeeee;
+            padding: 1em;
+        }
+        .menu[disabled]{
+            display: none;
+        }
+
+        .log {
+            font-family: monospace;
+        }
+
+        #msg-unavalible {
+            display: none;
+        }
+
+        #msg-unavalible[active] {
+            display: block;
+        }
+
+        
+    </style>
 </head>
 
 <body>
-    <canvas width="800" height="600"></canvas>
-    <button id="button_next">Next</button>
-    <span id="msg"></span>
+    <select class="form-select-sm" id="select-language">
+        <option value="en">English </option>
+        <option value="ja">日本語 </option>
+        <option value="zh">中文 </option>
+    </select>
+    <h1>Fast Muiltpole Method
+        for WebGPU Demo</h1>
+
+    <div class="canvas_container">
+        <canvas width="800" height="600"></canvas>
+    </div>
+
+    <div id="msg-unavalible" class="container">
+
+        <span data-text-zh="当前浏览器无法使用 WebGPU API。请参考："
+              data-text-ja="このブラウザでは WebGPU API を使えません。ご参考してください："
+              data-text-en="The WebGPU API is unavalible on this browser. Please check: ">
+        </span>
+        <a href="https://caniuse.com/webgpu" target="_blank">Can I use WebGPU?</a>
+    </div>
+    <div class="menu container">
+
+        <div class="row g-3 align-items-center">
+            <div class="col-auto log">
+                Node count: 100,000&nbsp;|&nbsp;<span id="msg-render"></span>&nbsp;|&nbsp;<span id="msg-data"></span>
+            </div>
+        </div>
+        <div class="row g-3 align-items-center mt-1">
+            <div class="col-auto">
+                <button id="button-start" class="btn btn-primary me-2">
+                    <span data-text-zh="启动"
+                          data-text-ja="起動"
+                          data-text-en="Start">
+                    </span>
+                </button>
+                <button id="button-next-step" class="btn btn-primary me-2">
+                    <span data-text-zh="下一动"
+                          data-text-ja="次のステップ"
+                          data-text-en="Next Step"></span>
+                </button>
+                <button id="button_2" class="btn btn-info" disabled>
+                    <span>placeholder</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
     <script src="bundle.js"></script>
 </body>
 

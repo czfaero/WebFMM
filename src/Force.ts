@@ -4,6 +4,9 @@ import { TreeBuilder } from './TreeBuilder';
 import { INBodySolver } from './INBodySolver';
 import { debug_FindNaN, DebugMode } from './Debug';
 
+
+let debugMode = DebugMode.off;
+
 const k = 5;// spring force coef
 const k_distance = 0.1;// distance when spring 0 force
 const delta = 0.04;//F = accel * delta; 
@@ -12,7 +15,11 @@ var solver: INBodySolver;
 var next = false;
 const stepMode = 0;
 const maxIter = 100;
-const msg = document.querySelector("#msg") as HTMLSpanElement;
+
+let _Log_callback = null;
+function Log(msg: string) {
+    if (_Log_callback) { _Log_callback(msg) }
+}
 
 let tree: TreeBuilder;
 
@@ -28,17 +35,15 @@ export function Data_debug_AddWatch(src: number, dst: number) {
     debug_watch_box_id_pairs.push({ src: src, dst: dst })
 }
 
-export function DataStart() {
-    let button = document.querySelector("#button_next") as HTMLButtonElement;
-    button.onclick = function () {
-        next = true;
-    }
-
-
+export function DataStart(Log_callback) {
+    _Log_callback = Log_callback;
     //solver = new FMMSolver(nodeBuffer, "wgpu");
     // solver = new DirectSolver(nodeBuffer);
     // solver.main();
-    RecordVideo();
+    // RecordVideo();
+}
+export function DataStep() {
+    next = true;
 }
 
 function GetPoint(i: number, buffer: Float32Array) {
@@ -95,8 +100,16 @@ export function DataUpdate(
             const l_ = l - k_distance;
             const normalized = { x: dist.x / l, y: dist.y / l, z: dist.z / l };
             const dist2 = { x: normalized.x * l_, y: normalized.y * l_, z: normalized.z * l_ }
-            if (isNaN(dist2.x)) { debugger; }
-            if (isNaN(accelBuffer[i1 * 3])) { debugger; }
+
+            if (isNaN(dist2.x) || isNaN(accelBuffer[i1 * 3])) {
+                if (debugMode == DebugMode.debugger) {
+                    debugger;
+                } else {
+                    Log("Aborted at iter " + iterCount)
+                    return;
+                }
+
+            }
             accelBuffer[i1 * 3] += dist2.x * k;
             accelBuffer[i1 * 3 + 1] += dist2.y * k;
             accelBuffer[i1 * 3 + 2] += dist2.z * k;
@@ -125,7 +138,7 @@ export function DataUpdate(
         device.queue.writeBuffer(colorBufferGPU, 0, colorBuffer);
         device.queue.writeBuffer(nodeBufferGPU, 0, nodeBuffer);
         solver = null;
-        msg.innerHTML = "iter: " + iterCount;
+        Log("iter: " + iterCount);
         // if (iterCount == 1) { RecordVideo() }
     }
     if (!stepMode || next) {
