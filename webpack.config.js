@@ -1,4 +1,5 @@
 const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
     mode: 'development',
@@ -25,8 +26,14 @@ module.exports = {
     },
     output: {
         filename: 'bundle.js',
-        path: path.resolve(__dirname, 'dist'),
+        path: path.resolve(__dirname, 'doc'),
     },
+    plugins: [
+        new HtmlWebpackPlugin({
+            template: './dist/index.html',
+            filename: 'index.html' // 输出到doc文件夹
+        })
+    ],
     devServer: {
         static: {
             directory: path.join(__dirname, 'dist'),
