@@ -1,10 +1,11 @@
-
+import { DebugMode } from "./Debug";
 
 export class TreeBuilder {
     nodeBuffer: Float32Array;
     colorBuffer: Float32Array;
     linkBuffer: Uint32Array;
     nodeCount: number;
+    debugMode: DebugMode;
     getNode(i: number) {
         const nodeBuffer = this.nodeBuffer;
         return {
@@ -51,7 +52,7 @@ export class TreeBuilder {
     setOptimumLevel() {
         // 按照点的数量区间定级别
         const level_switch = [1e5, 7e5, 7e6, 5e7, 3e8, 2e9]; // gpu-fmm
-        
+
         this.maxLevel = 2;
         for (const level of level_switch) {
             if (this.nodeCount >= level) {
@@ -265,6 +266,7 @@ export class TreeBuilder {
         this.boxIndexMaskBuffers[numLevel] = boxIndexMask;
     }
     constructor(nodeBuffer: Float32Array, linkBuffer: Uint32Array, colorBuffer: Float32Array) {
+        this.debugMode = DebugMode.off;
         this.nodeBuffer = nodeBuffer;
         this.nodeCount = nodeBuffer.length / 4;
         this.linkBuffer = linkBuffer;
@@ -290,9 +292,10 @@ export class TreeBuilder {
         this.levelBoxCounts = this.levelOffset.map((x, i) =>
             i == 0 ? 0 : this.levelOffset[i - 1] - x
         );
+    }
 
-
-        console.log(`-- Tree info --
+    getInfoString() {
+        return `-- Tree info --
 nodeCount                     : ${this.nodeCount}
 maxLevel                      : ${this.maxLevel} 
 BoxIndexFull=1<<3*maxLevel    : ${this.numBoxIndexFull}
@@ -304,9 +307,7 @@ levelOffset: ${this.levelOffset}
 ${Array.from(this.levelOffset)
                 .map((x, i) => { return i < this.maxLevel - 1 ? `  ${i + 1} -> ${x - this.levelOffset[i + 1]} of ${1 << 3 * (i + 2)}` : "" })
                 .join("\n")}
-`);
-        console.log(this);
-
+`;
     }
     debug_watch: any;
 

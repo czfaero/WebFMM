@@ -2,6 +2,7 @@ import { FMMSolver } from './FMMSolver';
 import { DirectSolver } from './DirectSolver';
 import { TreeBuilder } from './TreeBuilder';
 import { INBodySolver } from './INBodySolver';
+import { debug_FindNaN, DebugMode } from './Debug';
 
 const k = 5;// spring force coef
 const k_distance = 0.1;// distance when spring 0 force
@@ -135,6 +136,7 @@ export function DataUpdate(
 
             // solver = new DirectSolver(tree);
             solver = new FMMSolver(tree, "wgsl");
+            (solver as FMMSolver).iterCount = iterCount;
             solver.main();
             iterCount++;
         }
@@ -157,25 +159,27 @@ function* debug_Run(tree) {
     console.log("FMM GPU", solver.debug_info, accelBuffer3);
     yield;
     const E = debug_getError(accelBuffer1, accelBuffer3);
-    console.log("E", E);
+    console.log("Error: FMM GPU / Direct GPU", E);
     debugger;
 
 
     solver = new FMMSolver(tree);
     solver.debug_watch_box_id_pairs = debug_watch_box_id_pairs;
-    solver.debug = true;
+    solver.debugMode = DebugMode.log;
     solver.kernel.debug = true;
     solver.main();
     while (!solver.isDataReady()) { yield; }
     const accelBuffer2 = solver.getAccelBuffer();
     console.log("FMM CPU", solver.debug_info, accelBuffer2);
-    debugger;
+    //debugger;
 
     solver = new DirectSolver(tree, false);
     solver.main();
     while (!solver.isDataReady()) { yield; }
     const accelBuffer4 = solver.getAccelBuffer();
     console.log("Direct CPU", solver.debug_info, accelBuffer4);
+    const E2 = debug_getError(accelBuffer4, accelBuffer3);
+    console.log("Error: FMM GPU / Direct CPU", E2);
     yield;
     throw "pause";
 }
@@ -199,9 +203,10 @@ function RecordVideo() {
     const recordedChunks = [];
 
     console.log(stream);
-    const options = { mimeType: 
-        //"video/webm; codecs=vp9" 
-        "video/mp4", videoBitsPerSecond: 2500000,
+    const options = {
+        mimeType:
+            //"video/webm; codecs=vp9" 
+            "video/mp4", videoBitsPerSecond: 2500000,
     };
     const mediaRecorder = new MediaRecorder(stream, options);
 

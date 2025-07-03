@@ -6,6 +6,7 @@ import { debug_l2p } from "./debug_l2p";
 import { debug_m2m_p4 } from "./debug_m2m";
 import { debug_l2l_p4 } from "./debug_l2l";
 import { debug_p2p } from "./debug_p2p";
+import { DebugMode } from "../Debug";
 
 /**
  * debug kernel for valiating FMM
@@ -13,7 +14,7 @@ import { debug_p2p } from "./debug_p2p";
  */
 export class FMMKernel_ts implements IFMMKernel {
     core: FMMSolver;
-    debug: boolean;
+    debugMode:DebugMode;
     accelBuffer: Float32Array;
     /**
      * index same as tree.boxIndexFull

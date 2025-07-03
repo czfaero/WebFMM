@@ -19,6 +19,8 @@ import { debug_m2m_p4 } from './FMMKernel_ts/debug_m2m';
 import { debug_p2p } from './FMMKernel_ts/debug_p2p';
 import { INBodySolver } from './INBodySolver';
 import { FMMKernel_wgsl } from './FMMKernel_wgpu/kernel_wgsl';
+import { DebugMode } from './Debug';
+
 
 /**max of M2L interacting boxes */
 const maxM2LInteraction = 189;
@@ -30,6 +32,8 @@ export class FMMSolver implements INBodySolver {
 
     debug_results;
     debug_info: any;
+    debugMode: DebugMode;
+    iterCount: number;
 
     getNode(i: number) {
         return this.tree.getNode(i);
@@ -193,6 +197,7 @@ export class FMMSolver implements INBodySolver {
         this.kernel = new TKernel(this);
         this.tree = tree;
 
+        this.debugMode = DebugMode.off;
         this.debug_info = []
 
         // constants
@@ -203,7 +208,6 @@ export class FMMSolver implements INBodySolver {
 
         this.interactionCounts = new Int32Array(tree.numBoxIndexLeaf);
         this.interactionList = new Array(tree.numBoxIndexLeaf).fill(0).map(_ => new Int32Array(maxM2LInteraction));
-        console.log("Create with kernel: " + kernelName, "numExpansions: ", this.numExpansions);
     }
 
     isDataReady() {

@@ -1,3 +1,4 @@
+import { DebugMode } from "./Debug";
 
 
 export interface INBodySolver {
@@ -9,7 +10,7 @@ export interface INBodySolver {
 
     // for debug
     debug_watch_box_id_pairs?: any;
-    debug?: any;
+    debugMode?: DebugMode;
     debug_info?: any;
     kernel?: any;
 }

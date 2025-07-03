@@ -12,6 +12,7 @@ import wgsl_getNode from './shaders/getNode.wgsl';
 
 import { FMMSolver } from "../FMMSolver";
 import { IFMMKernel } from "../IFMMKernel";
+import { debug_FindNaN, DebugMode } from '../Debug';
 
 const SIZEOF_32 = 4;
 const maxM2LInteraction = 189;
@@ -44,6 +45,7 @@ const uniforms_m2m = {
 const uniforms_m2l = {
     boxSize: f32,
     offset: u32,
+    iterCount: u32,
 };
 const uniforms_l2l = {
     boxMinX: f32,
@@ -74,7 +76,7 @@ const uniform_structs =
 
 export class FMMKernel_wgsl implements IFMMKernel {
     core: FMMSolver;
-    debug: boolean;
+    debugMode: DebugMode;
     debug_info: any;
     accelBuffer: Float32Array;
     /**
@@ -121,7 +123,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
     constructor(core: FMMSolver) {
         this.core = core;
         this.debug_info = [];
-        this.debug = false;
+        this.debugMode = 0;
     }
     async Init() {
         const core = this.core;
@@ -132,7 +134,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
         this.maxThreadPerGroup = this.device.limits.maxComputeInvocationsPerWorkgroup;
         this.InitShaders();
 
-        if (this.debug) {
+        if (this.debugMode) {
             this.Mnm = new Float32Array(core.MnmSize * 2 * tree.numBoxIndexTotal);
             this.Lnm = new Float32Array(core.MnmSize * 2 * tree.numBoxIndexTotal);
         }
@@ -245,7 +247,8 @@ export class FMMKernel_wgsl implements IFMMKernel {
         this.device.queue.writeBuffer(this.interactionListGPU, 0, this.interactionListBuffer);
     }
     async p2p() {
-        const waitDone = this.debug;
+        const bufferToRead = this.debugMode ? this.accelBufferGPU : null;
+        const waitDone = bufferToRead != null;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
@@ -267,14 +270,17 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.accelBufferGPU],
             workgroupCount,
             waitDone,
-            // this.accelBufferGPU, // debug  to Read
+            bufferToRead
         );
-        this.debug_info.push({ step: "P2P", time: performance.now() - time });
-        //await this.GetReadBufferContent(this.accelBuffer);//dbug
+        if (this.debugMode) {
+            this.debug_info.push({ step: "P2P", time: performance.now() - time });
+            //await this.GetReadBufferContent(this.accelBuffer);//dbug
+        }
     }
 
     async p2m() {
-        const waitDone = this.debug;
+        const bufferToRead = this.debugMode ? this.mnmBufferGPU : null;
+        const waitDone = bufferToRead != null;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
@@ -301,14 +307,20 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.mnmBufferGPU],
             workgroupCount,
             waitDone,
-            // this.mnmBufferGPU, // debug  to Read
+            bufferToRead
         );
-        //await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
-
-        this.debug_info.push({ step: "P2M", time: performance.now() - time });
+        if (this.debugMode) {
+            await this.GetReadBufferContent(this.Mnm);
+            this.debug_info.push({
+                step: "P2M",
+                time: performance.now() - time,
+                nanIndex: debug_FindNaN(this.Mnm),
+            });
+        }
     }
     async m2m(numLevel: number) {
-        const waitDone = this.debug;
+        const bufferToRead = this.debugMode ? this.mnmBufferGPU : null;
+        const waitDone = bufferToRead != null;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
@@ -338,14 +350,20 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.mnmBufferGPU],
             workgroupCount,
             waitDone,
-            // this.mnmBufferGPU, // debug  to Read
+            bufferToRead
         );
-        //await this.GetReadBufferContent(this.Mnm); console.log("Mnm", this.Mnm);// debug
-
-        this.debug_info.push({ step: `M2M@${numLevel + 1}->${numLevel}`, time: performance.now() - time });
+        if (this.debugMode) {
+            await this.GetReadBufferContent(this.Mnm);
+            this.debug_info.push({
+                step: `M2M@${numLevel + 1}->${numLevel}`,
+                time: performance.now() - time,
+                nanIndex: debug_FindNaN(this.Mnm),
+            });
+        }
     }
     async m2l(numLevel: number) {
-        const waitDone = this.debug;
+        const bufferToRead = this.debugMode ? this.lnmBufferGPU : null;
+        const waitDone = bufferToRead != null;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
@@ -355,6 +373,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             {
                 boxSize: tree.rootBoxSize / (2 << (numLevel)),
                 offset: tree.levelOffset[numLevel],
+                iterCount:core.iterCount,
             },
             uniforms_m2l);
         this.setInteractionList();
@@ -368,17 +387,27 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.lnmBufferGPU],
             workgroupCount,
             waitDone,
-            // this.lnmBufferGPU, // debug  to Read
+            bufferToRead
         );
-        // await this.GetReadBufferContent(this.Lnm); console.log("Lnm", this.Lnm);// debug
 
-        this.debug_info.push({
-            step: `M2L@${numLevel}`,
-            time: performance.now() - time
-        });
+        if (this.debugMode) {
+            await this.GetReadBufferContent(this.Lnm);
+            const info = {
+                step: `M2L@${numLevel}`,
+                time: performance.now() - time,
+                nanIndex: debug_FindNaN(this.Lnm),
+            }
+            this.debug_info.push(info);
+            if (info.nanIndex.length > 0) {
+                if (this.debugMode == "debugger") debugger;
+            }
+        }
+
     }
     async l2l(numLevel: number) {
-        const waitDone = this.debug;
+
+        const bufferToRead = this.debugMode ? this.lnmBufferGPU : null;
+        const waitDone = bufferToRead != null;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
@@ -406,14 +435,24 @@ export class FMMKernel_wgsl implements IFMMKernel {
             this.lnmBufferGPU],
             workgroupCount,
             waitDone,
-            // this.lnmBufferGPU, // debug  to Read
+            bufferToRead
         );
-        // await this.GetReadBufferContent(this.Lnm); console.log("Lnm", this.Lnm);
-        this.debug_info.push({ step: `L2L@${numLevel}->${numLevel + 1}`, time: performance.now() - time });
+        if (this.debugMode) {
+            await this.GetReadBufferContent(this.Lnm);
+            const info = {
+                step: `L2L@${numLevel}->${numLevel + 1}`,
+                time: performance.now() - time,
+                nanIndex: debug_FindNaN(this.Lnm),
+            };
+            if (info.nanIndex.length > 0) {
+                if (this.debugMode == "debugger") debugger;
+            }
+            this.debug_info.push(info);
+        }
 
     }
     async l2p() {
-        const waitDone = this.debug;
+        const waitDone = true;
         const time = performance.now();
         const core = this.core;
         const tree = core.tree;
@@ -441,8 +480,12 @@ export class FMMKernel_wgsl implements IFMMKernel {
             waitDone,
             this.accelBufferGPU, // the result
         );
-        this.debug_info.push({ step: `L2P`, time: performance.now() - time });
-
+        if (this.debugMode) {
+            this.debug_info.push({
+                step: `L2P`,
+                time: performance.now() - time
+            });
+        }
         await this.GetReadBufferContent(this.accelBuffer);
     }
 
@@ -599,3 +642,4 @@ export class FMMKernel_wgsl implements IFMMKernel {
     }
 
 }
+

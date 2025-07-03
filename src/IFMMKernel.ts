@@ -1,8 +1,9 @@
+import { DebugMode } from "./Debug";
 import { FMMSolver } from "./FMMSolver";
 
 export interface IFMMKernel {
     core: FMMSolver;
-    debug: boolean;
+    debugMode: DebugMode;
     accelBuffer: Float32Array;
     Init: () => Promise<void>;
     p2p: () => Promise<void>;
