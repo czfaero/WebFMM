@@ -22,14 +22,14 @@ export class FMMKernel_ts implements IFMMKernel {
      */
     Mnm: Float32Array;
     Lnm: Float32Array;
-    debug_info: any;
+    debugInfo: any;
     getMnmOffset(numLevel: number, index: number) {
         let i = this.core.tree.levelOffset[numLevel] + index;
         return i * this.core.MnmSize * 2;// complex number
     }
     constructor(core: FMMSolver) {
         this.core = core;
-        this.debug_info = [];
+        this.debugInfo = [];
     }
     async Init() {
         const core = this.core;
@@ -56,7 +56,7 @@ export class FMMKernel_ts implements IFMMKernel {
                 boxAccel.forEach((v, k) => this.accelBuffer[accelOffset + k] += v);
             }
         }
-        this.debug_info.push({ step: "P2P", time: performance.now() - time });
+        this.debugInfo.push({ step: "P2P", time: performance.now() - time });
     }
 
     async p2m() {
@@ -71,7 +71,7 @@ export class FMMKernel_ts implements IFMMKernel {
             let MnmOffset = this.getMnmOffset(tree.maxLevel - 1, i);
             this.Mnm.set(boxMnm, MnmOffset);
         }
-        this.debug_info.push({ step: "P2M", time: performance.now() - time });
+        this.debugInfo.push({ step: "P2M", time: performance.now() - time });
     }
     async m2m(numLevel: number) {
         const time = performance.now();
@@ -97,7 +97,7 @@ export class FMMKernel_ts implements IFMMKernel {
             this.Mnm.set(dst_boxMnm_total, this.getMnmOffset(numLevel, i));
 
         }
-        this.debug_info.push({ step: `M2M@${numLevel + 1}->${numLevel}`, time: performance.now() - time });
+        this.debugInfo.push({ step: `M2M@${numLevel + 1}->${numLevel}`, time: performance.now() - time });
     }
     async m2l(numLevel: number) {
         const time = performance.now();
@@ -121,7 +121,7 @@ export class FMMKernel_ts implements IFMMKernel {
             }
 
         }
-        this.debug_info.push({
+        this.debugInfo.push({
             step: `M2L@${numLevel}`,
             time: performance.now() - time,
             interactionCount: debug_interactionCount
@@ -151,7 +151,7 @@ export class FMMKernel_ts implements IFMMKernel {
                 }
             }
         }
-        this.debug_info.push({ step: `L2L@${numLevel}->${numLevel + 1}`, time: performance.now() - time });
+        this.debugInfo.push({ step: `L2L@${numLevel}->${numLevel + 1}`, time: performance.now() - time });
     }
     async l2p() {
         const time = performance.now();
@@ -167,8 +167,8 @@ export class FMMKernel_ts implements IFMMKernel {
             let accelOffset = tree.nodeStartOffset[box_id] * 3;
             boxAccel.forEach((v, k) => this.accelBuffer[accelOffset + k] += v);
         }
-        this.debug_info.push({ step: `L2P`, time: performance.now() - time });
+        this.debugInfo.push({ step: `L2P`, time: performance.now() - time });
     }
 
-    Release() { }
+    Destory() { }
 }

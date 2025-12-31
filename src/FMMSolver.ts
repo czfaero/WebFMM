@@ -7,8 +7,6 @@ import { TreeBuilder } from './TreeBuilder';
 
 import { cart2sph, GetIndex3D, GetIndexFrom3D } from "./utils";
 
-
-import { Debug_Id_Pair } from './Force';
 import { debug_p2m } from './FMMKernel_ts/debug_p2m';
 import { debug_m2l_p4 } from './FMMKernel_ts/debug_m2l';
 import { debug_l2p } from './FMMKernel_ts/debug_l2p';
@@ -28,10 +26,10 @@ const maxM2LInteraction = 189;
 export class FMMSolver implements INBodySolver {
     // Basic data and helper
 
-    debug_watch_box_id_pairs: Array<Debug_Id_Pair>;//non-empty id
+    //debug_watch_box_id_pairs: Array<Debug_Id_Pair>;//non-empty id
 
     debug_results;
-    debug_info: any;
+    debugInfo: any;
     debugMode: DebugMode;
     iterCount: number;
 
@@ -172,11 +170,11 @@ export class FMMSolver implements INBodySolver {
         }
 
         await this.kernel.l2p();
-        this.kernel.Release();
+        this.kernel.Destory();
         this.dataReady = true;
 
-        this.debug_info.push({ time: performance.now() - time });
-        this.debug_info.push(this.kernel.debug_info);
+        this.debugInfo.push({ time: performance.now() - time, step: "total" });
+        this.debugInfo.push(...this.kernel.debugInfo);
     }
 
     numExpansions: number;
@@ -198,7 +196,7 @@ export class FMMSolver implements INBodySolver {
         this.tree = tree;
 
         this.debugMode = DebugMode.off;
-        this.debug_info = []
+        this.debugInfo = []
 
         // constants
         this.numExpansions = 10;
@@ -215,6 +213,9 @@ export class FMMSolver implements INBodySolver {
     }
     getAccelBuffer() {
         return this.kernel.accelBuffer;
+    }
+    Destroy() {
+        this.kernel.Destory();
     }
 
     /** example: 
@@ -377,19 +378,19 @@ export class FMMSolver implements INBodySolver {
         }
 
 
-        if (this.debug_watch_box_id_pairs) {
-            this.debug_results = this.debug_watch_box_id_pairs.map(pair => {
-                if (pair.src >= tree.numBoxIndexLeaf || pair.dst >= tree.numBoxIndexLeaf) {
-                    return
-                }
-                const route = this.debug_getRoute(pair.src, pair.dst);
-                console.log("debug route: ", route)
+        // if (this.debug_watch_box_id_pairs) {
+        //     this.debug_results = this.debug_watch_box_id_pairs.map(pair => {
+        //         if (pair.src >= tree.numBoxIndexLeaf || pair.dst >= tree.numBoxIndexLeaf) {
+        //             return
+        //         }
+        //         const route = this.debug_getRoute(pair.src, pair.dst);
+        //         console.log("debug route: ", route)
 
-                return this.debug_TestRoute(route);
-            });
-            console.log(this.debug_results)
-            //debugger;
-        }
+        //         return this.debug_TestRoute(route);
+        //     });
+        //     console.log(this.debug_results)
+        //     //debugger;
+        // }
     }
 
 }

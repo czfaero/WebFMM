@@ -2,30 +2,23 @@
 import { mat4, quat, vec3 } from 'gl-matrix';
 import wgsl from './shaders/NodeLinkRenderer.wgsl';
 import { FPSController } from './compenents/FPSController';
-
+import { NodeLinkSimulator } from './NodeLinkSimulator';
 
 
 export class NodeLinkRenderer {
-    nodeBuffer: Float32Array;
-    linkBuffer: Uint32Array;
-    nodeColorBuffer: Float32Array;
-    setData(nodes: Float32Array, links: Uint32Array, nodeColors: Float32Array) {
-        this.nodeBuffer = nodes;
-        this.linkBuffer = links;
-        this.nodeColorBuffer = nodeColors;
-    };
+    simulator: NodeLinkSimulator;
 
-    dataUpdate: any;
-    log_callback: any;
+    log_func: any;
 
     Log(str: string) {
-        if (this.log_callback) {
-            this.log_callback(str);
+        if (this.log_func) {
+            this.log_func(str);
         }
     }
 
-    setDataUpdate(func: any) {
-        this.dataUpdate = func;
+    destroyFlag: boolean;
+    Destroy() {
+        this.destroyFlag = true;
     }
 
     async init(canvasElement: HTMLCanvasElement) {
@@ -34,7 +27,9 @@ export class NodeLinkRenderer {
         const device = await adapter.requestDevice();
 
         const context = canvasElement.getContext('webgpu') as unknown as GPUCanvasContext;
-
+        const simulator = _.simulator;
+        await simulator.ResetData();
+        _.destroyFlag = false;
         const devicePixelRatio = window.devicePixelRatio || 1;
         // const presentationSize = [
         //   canvasElement.clientWidth * devicePixelRatio,
@@ -44,23 +39,17 @@ export class NodeLinkRenderer {
         //            - While validating depthStencilAttachment.
 
         const presentationSize = [
-            canvasElement.clientWidth,
-            canvasElement.clientHeight,
+            canvasElement.width,
+            canvasElement.height,
         ];
         const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
-        console.log(presentationFormat);
+        // console.log(presentationFormat);
         context.configure({
             device,
             format: presentationFormat,
             alphaMode: 'opaque',
         });
 
-
-        const nodeColorsBuffer = device.createBuffer({
-            size: this.nodeColorBuffer.byteLength,
-            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-        });
-        device.queue.writeBuffer(nodeColorsBuffer, 0, this.nodeColorBuffer);
 
         // For node
         const quadVertexData = new Float32Array([
@@ -76,21 +65,26 @@ export class NodeLinkRenderer {
         quadVertexBuffer.unmap();
 
         // The node pos buffers for both computing and rendering
-        const nodesBuffer0 = device.createBuffer({
-            size: this.nodeBuffer.byteLength,
+        const nodeBufferGPU = device.createBuffer({
+            size: simulator.nodeBuffer.byteLength,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
-        device.queue.writeBuffer(nodesBuffer0, 0, this.nodeBuffer);
+        device.queue.writeBuffer(nodeBufferGPU, 0, simulator.nodeBuffer);
 
 
 
         // Link
-        const gpuLinkBuffer = device.createBuffer({
-            size: this.linkBuffer.byteLength,
+        const linkBufferGPU = device.createBuffer({
+            size: simulator.linkBuffer.byteLength,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
-        device.queue.writeBuffer(gpuLinkBuffer, 0, this.linkBuffer);
+        device.queue.writeBuffer(linkBufferGPU, 0, simulator.linkBuffer);
 
+        const nodeColorBufferGPU = device.createBuffer({
+            size: simulator.nodeColorBuffer.byteLength,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        });
+        device.queue.writeBuffer(nodeColorBufferGPU, 0, simulator.nodeColorBuffer);
 
         const shaderModule = device.createShaderModule({
             code: wgsl,
@@ -296,7 +290,7 @@ export class NodeLinkRenderer {
                 {
                     binding: 1,
                     resource: {
-                        buffer: nodesBuffer0,
+                        buffer: nodeBufferGPU,
                     },
                 }
             ],
@@ -310,7 +304,6 @@ export class NodeLinkRenderer {
         const worldOrigin = vec3.fromValues(0, 0, 0);
 
         let lastTime = performance.now();
-        let s = 0;
         let frameCount = 0;
         const camera = new FPSController(vec3.fromValues(0, 0, 20), quat.create());
         function UpdateView(time: DOMHighResTimeStamp) {
@@ -351,14 +344,32 @@ export class NodeLinkRenderer {
             }
             _.Log(`FPS: ${(fps).toFixed(1)}`);
         }
-
+        let runSimulatorUpdate = true;
         function Update(time: DOMHighResTimeStamp) {
             UpdateView(time);
-            if (_.dataUpdate) {
-                _.dataUpdate(_.nodeBuffer, _.linkBuffer, _.nodeColorBuffer, nodesBuffer0, gpuLinkBuffer, nodeColorsBuffer, device);
+            if (runSimulatorUpdate) {
+                try {
+                    let hasUpdate = simulator.Update();
+                    if (hasUpdate) {
+                        device.queue.writeBuffer(linkBufferGPU, 0, simulator.linkBuffer);
+                        device.queue.writeBuffer(nodeColorBufferGPU, 0, simulator.nodeColorBuffer);
+                        device.queue.writeBuffer(nodeBufferGPU, 0, simulator.nodeBuffer);
+                    }
+                } catch (e) {
+                    if (e.type == "retry") {
+                        console.log("Retry at: ", e.info);
+                        simulator.ResetData()
+                        console.log("Restart");
+                    } else if (e.type == "abort") {
+                        runSimulatorUpdate = false;
+                    }
+                    else {
+                        throw e;
+                    }
+                }
             }
             const commandEncoder = device.createCommandEncoder();
-
+            commandEncoder.pushDebugGroup("NodeLinkRenderer"); // require HTTPS
             // Must create every time, or there would be 'Destroyed texture [Texture] used in a submit.'
             const textureView = context.getCurrentTexture().createView();
 
@@ -390,17 +401,21 @@ export class NodeLinkRenderer {
             renderPassEncoder.setPipeline(nodePipeline);
             renderPassEncoder.setBindGroup(0, nodeBindGroup);
             renderPassEncoder.setVertexBuffer(0, quadVertexBuffer);
-            renderPassEncoder.setVertexBuffer(1, nodesBuffer0);
-            renderPassEncoder.setVertexBuffer(2, nodeColorsBuffer);
-            renderPassEncoder.draw(quadVertexData.length / 2, _.nodeBuffer.length / 4, 0, 0);
+            renderPassEncoder.setVertexBuffer(1, nodeBufferGPU);
+            renderPassEncoder.setVertexBuffer(2, nodeColorBufferGPU);
+            renderPassEncoder.draw(quadVertexData.length / 2, simulator.nodeBuffer.length / 4, 0, 0);
             renderPassEncoder.setPipeline(linkPipeline);
             renderPassEncoder.setBindGroup(0, linkBindGroup);
-            renderPassEncoder.setVertexBuffer(1, gpuLinkBuffer);
-            renderPassEncoder.draw(quadVertexData.length / 2, _.linkBuffer.length / 2, 0, 0);
+            renderPassEncoder.setVertexBuffer(1, linkBufferGPU);
+            renderPassEncoder.draw(quadVertexData.length / 2, simulator.linkBuffer.length / 2, 0, 0);
 
             renderPassEncoder.end();
-
+            commandEncoder.popDebugGroup();
             device.queue.submit([commandEncoder.finish()]);
+            if (_.destroyFlag) {
+                device.destroy();
+                return;
+            }
             requestAnimationFrame(Update);
         }
 

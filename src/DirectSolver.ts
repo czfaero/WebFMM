@@ -19,12 +19,12 @@ export class DirectSolver implements INBodySolver {
     accelBuffer: Float32Array;
     useWgpu: boolean;
 
-    debug_info: any;
+    debugInfo: any;
 
 
     isDataReady() { return this.dataReady; }
     getAccelBuffer() { return this.accelBuffer; }
-
+    Destroy() { }
     constructor(tree: TreeBuilder, useWgpu = true) {
         this.nodeBuffer = tree.nodeBuffer;
         this.tree = tree;
@@ -43,7 +43,7 @@ export class DirectSolver implements INBodySolver {
             this.Calc();
         }
         this.dataReady = true;
-        this.debug_info = [{ time: performance.now() - time }];
+        this.debugInfo = [{ time: performance.now() - time, step: "total" }];
     }
 
 

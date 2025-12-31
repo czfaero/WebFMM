@@ -77,7 +77,7 @@ const uniform_structs =
 export class FMMKernel_wgsl implements IFMMKernel {
     core: FMMSolver;
     debugMode: DebugMode;
-    debug_info: any;
+    debugInfo: any;
     accelBuffer: Float32Array;
     /**
      * CPU buffer only for debug.
@@ -122,8 +122,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
 
     constructor(core: FMMSolver) {
         this.core = core;
-        this.debug_info = [];
-        this.debugMode = 0;
+        this.debugInfo = [];
     }
     async Init() {
         const core = this.core;
@@ -273,7 +272,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             bufferToRead
         );
         if (this.debugMode) {
-            this.debug_info.push({ step: "P2P", time: performance.now() - time });
+            this.debugInfo.push({ step: "P2P", time: performance.now() - time });
             //await this.GetReadBufferContent(this.accelBuffer);//dbug
         }
     }
@@ -311,11 +310,22 @@ export class FMMKernel_wgsl implements IFMMKernel {
         );
         if (this.debugMode) {
             await this.GetReadBufferContent(this.Mnm);
-            this.debug_info.push({
+            const info = {
                 step: "P2M",
                 time: performance.now() - time,
                 nanIndex: debug_FindNaN(this.Mnm),
-            });
+            }
+            this.debugInfo.push(info);
+            if (info.nanIndex.length > 0) {
+                if (this.debugMode == DebugMode.debugger) debugger;
+                else if (this.debugMode == DebugMode.retry_immediate) {
+                    const err = {
+                        type: "retry",
+                        info: info
+                    };
+                    throw err;
+                }
+            }
         }
     }
     async m2m(numLevel: number) {
@@ -354,11 +364,22 @@ export class FMMKernel_wgsl implements IFMMKernel {
         );
         if (this.debugMode) {
             await this.GetReadBufferContent(this.Mnm);
-            this.debug_info.push({
+            const info = {
                 step: `M2M@${numLevel + 1}->${numLevel}`,
                 time: performance.now() - time,
                 nanIndex: debug_FindNaN(this.Mnm),
-            });
+            }
+            this.debugInfo.push(info);
+            if (info.nanIndex.length > 0) {
+                if (this.debugMode == DebugMode.debugger) debugger;
+                else if (this.debugMode == DebugMode.retry_immediate) {
+                    const err = {
+                        type: "retry",
+                        info: info
+                    };
+                    throw err;
+                }
+            }
         }
     }
     async m2l(numLevel: number) {
@@ -373,7 +394,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             {
                 boxSize: tree.rootBoxSize / (2 << (numLevel)),
                 offset: tree.levelOffset[numLevel],
-                iterCount:core.iterCount,
+                iterCount: core.iterCount,
             },
             uniforms_m2l);
         this.setInteractionList();
@@ -397,9 +418,16 @@ export class FMMKernel_wgsl implements IFMMKernel {
                 time: performance.now() - time,
                 nanIndex: debug_FindNaN(this.Lnm),
             }
-            this.debug_info.push(info);
+            this.debugInfo.push(info);
             if (info.nanIndex.length > 0) {
-                if (this.debugMode == "debugger") debugger;
+                if (this.debugMode == DebugMode.debugger) debugger;
+                else if (this.debugMode == DebugMode.retry_immediate) {
+                    const err = {
+                        type: "retry",
+                        info: info
+                    };
+                    throw err;
+                };
             }
         }
 
@@ -444,10 +472,17 @@ export class FMMKernel_wgsl implements IFMMKernel {
                 time: performance.now() - time,
                 nanIndex: debug_FindNaN(this.Lnm),
             };
+            this.debugInfo.push(info);
             if (info.nanIndex.length > 0) {
-                if (this.debugMode == "debugger") debugger;
+                if (this.debugMode == DebugMode.debugger) debugger;
+                else if (this.debugMode == DebugMode.retry_immediate) {
+                    const err = {
+                        type: "retry",
+                        info: info
+                    };
+                    throw err;
+                }
             }
-            this.debug_info.push(info);
         }
 
     }
@@ -480,16 +515,31 @@ export class FMMKernel_wgsl implements IFMMKernel {
             waitDone,
             this.accelBufferGPU, // the result
         );
-        if (this.debugMode) {
-            this.debug_info.push({
-                step: `L2P`,
-                time: performance.now() - time
-            });
-        }
         await this.GetReadBufferContent(this.accelBuffer);
+        if (this.debugMode) {
+            const info = {
+                step: `L2P`,
+                time: performance.now() - time,
+                nanIndex: debug_FindNaN(this.accelBuffer),
+            };
+            this.debugInfo.push(info);
+
+            if (info.nanIndex.length > 0) {
+                if (this.debugMode == DebugMode.debugger) debugger;
+                else if (this.debugMode == DebugMode.retry_immediate) {
+                    const err = {
+                        type: "retry",
+                        info: info
+                    };
+                    throw err;
+                }
+            }
+        }
     }
 
-    Release() { }
+    Destory() {
+        this.device.destroy();
+    }
 
     InitShaders() {
         const core = this.core;
@@ -586,6 +636,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
             entries: entries
         });
         const commandEncoder = this.device.createCommandEncoder();
+        commandEncoder.pushDebugGroup(entryPoint); // not avalible orz
         if (preFunc) {
             preFunc(commandEncoder);
         }
@@ -604,7 +655,7 @@ export class FMMKernel_wgsl implements IFMMKernel {
         if (bufferToRead) {
             commandEncoder.copyBufferToBuffer(bufferToRead, 0, this.readBufferGPU, 0, bufferToRead.size);
         }
-
+        commandEncoder.popDebugGroup();
         const gpuCommands = commandEncoder.finish();
         this.device.queue.submit([gpuCommands]);
 
