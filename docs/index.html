@@ -4,14 +4,9 @@
 <head>
     <title>WebGPU FMM</title>
     <style>
-        .canvas_container {
-            margin: auto;
-            margin-top: 0.5em;
-            text-align: center;
-        }
-
         canvas {
-            border: #eeeeee solid 1px;
+            border: #cccccc solid 1px;
+            width: 100%;
         }
 
         h1 {
@@ -28,8 +23,10 @@
             border-radius: 0.5em;
             background: #eeeeee;
             padding: 1em;
+            margin-bottom: 0.5em;
         }
-        .menu[disabled]{
+
+        .menu[disabled] {
             display: none;
         }
 
@@ -45,7 +42,30 @@
             display: block;
         }
 
-        
+        #performance-test>div {
+            margin: 0.5em;
+        }
+
+        #performance-test>hr {
+            line-height: 1.5;
+        }
+
+        .emoji-button {
+            cursor: pointer;
+        }
+
+        .running::before {
+            content: "⏳";
+        }
+
+        .data-slot>span {
+            display: inline-block;
+            border-radius: 0.2em;
+            padding-left: 0.2em;
+            padding-right: 0.2em;
+            background-color: #d2d6db;
+            margin: 0.1em;
+        }
     </style>
 <script defer src="bundle.js"></script></head>
 
@@ -58,10 +78,6 @@
     <h1>Fast Muiltpole Method
         for WebGPU Demo</h1>
 
-    <div class="canvas_container">
-        <canvas width="800" height="600"></canvas>
-    </div>
-
     <div id="msg-unavalible" class="container">
 
         <span data-text-zh="当前浏览器无法使用 WebGPU API。请参考："
@@ -71,10 +87,11 @@
         <a href="https://caniuse.com/webgpu" target="_blank">Can I use WebGPU?</a>
     </div>
     <div class="menu container">
-
+        <canvas width="800" height="600"></canvas>
         <div class="row g-3 align-items-center">
             <div class="col-auto log">
-                Node count: 100,000&nbsp;|&nbsp;<span id="msg-render"></span>&nbsp;|&nbsp;<span id="msg-data"></span>
+                <span id="log-slot0">LOG0</span>&nbsp;|&nbsp;<span id="log-slot1">LOG1</span>&nbsp;|&nbsp;<span
+                      id="log-slot2">LOG2</span>
             </div>
         </div>
         <div class="row g-3 align-items-center mt-1">
@@ -85,20 +102,81 @@
                           data-text-en="Start">
                     </span>
                 </button>
-                <button id="button-next-step" class="btn btn-primary me-2">
+                <button id="button-next-step" class="btn btn-primary me-2" style="display: none;">
                     <span data-text-zh="下一动"
                           data-text-ja="次のステップ"
                           data-text-en="Next Step"></span>
                 </button>
-                <button id="button_2" class="btn btn-info" disabled>
-                    <span>placeholder</span>
+                <button id="button-pause" class="btn btn-primary me-2">
+                    <span data-text-zh="暂停/继续"
+                          data-text-ja="一時停止/再開"
+                          data-text-en="Pause/Resume"></span>
                 </button>
             </div>
+            <div class="col-auto">Data:</div>
+            <div class="col-auto">
+                <select id="select-data" name="node-link-data" class="form-select">
 
+                </select>
+            </div>
         </div>
     </div>
+    <div class="menu container" id="instruction">
+        <span data-text-zh="【视角操作】移动：前W，后S，左A，右D，上Q，下Z。旋转：↑↓←→。"
+              data-text-ja="【視点操作】移動：前W 后S 左A 右D 上Q 下Z。回転：↑↓←→。"
+              data-text-en="[Camera Control] Move: Forward-W Backward-S Left-A Right-D Up-Q Down-Z. Rotate: ↑↓←→。"></span>
+        <br>
+        <span data-text-zh="【概要】本项目实现了在浏览器环境里使用 WebGPU 运行 FMM (Fast Muiltpole Method) 以解决 Node-Link diagram 的布局计算问题。\N布局计算常用的力导向 (Force-directed) 方法中存在 N-body problem，计算复杂度为 O(N²)。而 FMM 可以将 N-body problem 的计算复杂度降低为 O(N)。\N上面的视图中可以观察到布局实时更新，向着更自然的布局变化。下方的测试提供 Direct 法（直接计算点与点之间的作用）与 FMM 的速度测试。"
+              data-text-ja="【概要】本研究は、ブラウザ環境の WebGPU で FMM（Fast Muiltpole Method）を実行して、ノードリンク図のレイアウト計算問題を解決する試みです。\Nレイアウト計算で一般的に使用される力指向法（Force-directed）では、計算複雑度が O(N²) の N-body 問題が存在します。FMM は N-body 問題の計算複雑度を O(N) に削減できます。\N上の図では、レイアウトがリアルタイムで更新され、より自然な配置に変化していく様子を観察できます。下のテストでは、Direct 法（点と点の相互作用を直接計算する方法）と FMM の速度比較を提供しています。"
+              data-text-en="[Abstract] This project implements the use of WebGPU in a browser environment to run FMM (Fast Multipole Method) for solving layout calculations of Node-Link diagrams. \NThe force-directed methods, which is commonly used for layout calculations, contains an N-body problem with a computational complexity of O(N²). FMM can reduce the computational complexity to O(N). \NIn the view above, the layout can be observed updating in real-time, evolving toward a more natural arrangement. The test below provides a speed comparison between the Direct method (directly computes interactions between nodes) and FMM."></span>
+        <br>
+        Source Code: <a target="_blank" href="https://github.com/czfaero/WebFMM">Github - WebFMM</a>
+    </div>
+    <div class="menu container" id="performance-test">
+        <div><span data-text-zh="【在当前浏览器测试性能】（毫秒）"
+                  data-text-ja="【このブラウザで性能テストを行う】（ミリ秒）"
+                  data-text-en="[Performance test in current browser](msec)"></span> Node count: 200000
+            <br>
+            <button id="pt-all" class="btn btn-primary me-2">
+                Test Course
+            </button>
+        </div>
 
-    <script src="bundle.js"></script>
+        <div id="pt-direct-cpu"><span class="emoji-button">▶️</span><s>Direct CPU</s> will freeze this page：<span
+                  class="data-slot"></span></div>
+        <div id="pt-fmm-cpu"><span class="emoji-button">▶️</span><s>FMM CPU</s> will freeze this page for minutes：<span
+                  class="data-slot"></span></div>
+        <div id="pt-direct-gpu"><span class="emoji-button">▶️</span>Direct GPU：<span class="data-slot"></span></div>
+        <div id="pt-fmm-gpu"><span class="emoji-button">▶️</span>FMM GPU：<span class="data-slot"></span></div>
+        <hr>
+        <div id="pt-task">Task List: <span class="data-slot"></span></div>
+        <hr>
+        <div><span data-text-zh="【参考测试结果】（毫秒）"
+                  data-text-ja="【参考テスト結果】（ミリ秒）"
+                  data-text-en="[Test results for reference](msec)"></span>
+            <table class="table table-success">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th><span title="NVIDIA GeForce GTX 1060 6GB, Windos 10, Chrome 143">GTX 1060</span></th>
+                        <th><span title="Apple M1 (Mac Mini), macOS 26, Chrome 143">Apple M1</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Direct GPU</td>
+                        <td>730</td>
+                        <td>1850</td>
+                    </tr>
+                    <tr>
+                        <td>FMM GPU</td>
+                        <td>160</td>
+                        <td>200</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </body>
 
 </html>
