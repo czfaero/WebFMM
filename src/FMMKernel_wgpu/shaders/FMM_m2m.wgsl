@@ -71,6 +71,9 @@ fn m2m(@builtin(local_invocation_id) local_id : vec3<u32>,
  
             for (var n = 0; n <= j; n++) {
                 for (var m = -n; m <= n; m++) {
+                    if (j - n < abs(k - m)) {
+                        continue; // Anm not exist
+                    }
                     let n_ = j - n; let m_ = k - m;
                     let i_src = u32(n_ * n_ + n_ + m_);
 

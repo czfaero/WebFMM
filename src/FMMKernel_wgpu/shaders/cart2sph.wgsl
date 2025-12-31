@@ -4,6 +4,7 @@
  */
 fn cart2sph(d: vec3f) -> vec3f {
     var r = sqrt(dot(d, d)) + eps;
+    if(d.z > r){ r = d.z;} // fix (0,0,x) cause NaN 
     var theta = acos(d.z / r);
     var phi: f32;
     if (abs(d.x) + abs(d.y) < eps) {
